@@ -1,0 +1,24 @@
+tax_year: 2026
+currency: "TTD"
+
+paye:
+  personal_allowance_annual: 90000.00
+  standard_periods_per_year: 12
+  chargeable_income_bands:
+    - annual_min: 0.00
+      annual_max: 1000000.00
+      rate: 0.25
+    - annual_min: 1000000.01
+      annual_max: ""
+      rate: 0.30
+
+health_surcharge:
+  weekly_threshold: 109.00
+  monthly_threshold: 469.99
+  lower_weekly_rate: 4.80
+  higher_weekly_rate: 8.25
+  exempt_under_age: 16
+  exempt_age_at_or_above: 60
+
+remittance:
+  paye_and_health_surcharge_due_day_next_month: 15

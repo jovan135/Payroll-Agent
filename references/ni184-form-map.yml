@@ -1,0 +1,48 @@
+page_size:
+  width: 1008
+  height: 612
+
+text_fields:
+  employer_trade_name: { page: 1, x: 126, y: 531, size: 8 }
+  address_line1: { page: 1, x: 104, y: 508, size: 8 }
+  address_line2: { page: 1, x: 104, y: 485, size: 8 }
+  total_employees: { page: 1, x: 220, y: 175, size: 8, align: center }
+  total_contributions: { page: 1, x: 970, y: 171, size: 8, align: right }
+  prepared_by_name: { page: 1, x: 420, y: 36, size: 8, align: center }
+
+box_fields:
+  employer_registration_number: { page: 1, x: 604, y: 532, step: 12.4, size: 8 }
+  telephone: { page: 1, y: 506, xs: [815, 832, 849, 879, 896, 913, 930], size: 8 }
+  period_from: { page: 1, y: 468, xs: [137, 151, 165, 179, 194, 208, 223, 237], size: 8 }
+  period_to: { page: 1, y: 468, xs: [292, 306, 320, 334, 349, 363, 378, 392], size: 8 }
+  weeks_in_period: { page: 1, y: 468, xs: [591, 607], size: 8 }
+
+employee_table:
+  first_row_y: 378
+  row_step: 18
+  rows_per_employee: 2
+  max_rows: 11
+  size: 7
+  date_size: 7
+  date_employed_y_offset: 0
+  last_work_row_offset: -18
+  columns:
+    nis_number: { x: 108, align: center }
+    surname: { x: 205, align: left }
+    first_name: { x: 364, align: left }
+    birth_year: { x: 443, align: center }
+    birth_month: { x: 477, align: center }
+    birth_day: { x: 506, align: center }
+    date_employed_year: { x: 538, align: center }
+    date_employed_month: { x: 572, align: center }
+    date_employed_day: { x: 604, align: center }
+    last_work_year: { x: 538, align: center }
+    last_work_month: { x: 572, align: center }
+    last_work_day: { x: 604, align: center }
+    salary: { x: 660, align: right }
+    week_1: { x: 705, align: right }
+    week_2: { x: 750, align: right }
+    week_3: { x: 799, align: right }
+    week_4: { x: 848, align: right }
+    week_5: { x: 893, align: right }
+    total: { x: 964, align: right }

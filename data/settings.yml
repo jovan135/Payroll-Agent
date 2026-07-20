@@ -1,0 +1,17 @@
+payroll:
+  currency: "TTD"
+  contribution_week_rule: "count_mondays"
+  default_last_work_date: "last_day_of_month"
+  contribution_year: 2026
+  rate_table: "data/nis_rates_2026.csv"
+
+forms:
+  ni184_template: "templates/NI184.pdf"
+  ni187_template: "templates/NI187.pdf"
+  require_manual_signature: true
+
+monthly_workflow:
+  prompt_timing: "end_of_month"
+  changes_file: "runs/{YYYY-MM}/changes.yml"
+  calculations_file: "runs/{YYYY-MM}/calculations.csv"
+  summary_file: "runs/{YYYY-MM}/summary.md"

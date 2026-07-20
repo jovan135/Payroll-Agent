@@ -1,0 +1,12 @@
+employer:
+  trade_name: "The J Spa and Skin Clinic LTD"
+  address:
+    line1: "25 A Circular Road"
+    city: "San Fernando"
+  telephone: "221-0695"
+  registration_number: "155218"
+
+declarant:
+  name: "Jhoneile Diaz-Cummings"
+  position: "Spa Manager"
+  signature_required_after_generation: true

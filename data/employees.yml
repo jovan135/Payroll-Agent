@@ -1,0 +1,48 @@
+employees:
+  - employee_id: "EMP001"
+    surname: "Diaz-Cummings"
+    first_name: "Jhoneile"
+    nis_number: "07 152 8487"
+    date_of_birth: "1990-01-17"
+    date_employed: "2020-09-01"
+    last_work_date_rule: "Use the last date of the month for which NIS is being calculated."
+    monthly_salary: 6000.00
+    bir_number: ""
+    pay_frequency: ""
+    tax_residency: ""
+    td1_annual_allowances: ""
+    approved_pension_or_annuity: ""
+    health_surcharge_exempt: ""
+    active: true
+
+  - employee_id: "EMP002"
+    surname: "Hosein"
+    first_name: "Marie"
+    nis_number: "05 160 6676"
+    date_of_birth: "1993-11-02"
+    date_employed: "2023-01-09"
+    last_work_date_rule: "Use the last date of the month for which NIS is being calculated."
+    monthly_salary: 5000.00
+    bir_number: ""
+    pay_frequency: ""
+    tax_residency: ""
+    td1_annual_allowances: ""
+    approved_pension_or_annuity: ""
+    health_surcharge_exempt: ""
+    active: true
+
+  - employee_id: "EMP003"
+    surname: "Hernandez"
+    first_name: "Daniella"
+    nis_number: "01 140 0338"
+    date_of_birth: "1979-06-05"
+    date_employed: "2025-01-10"
+    last_work_date_rule: "Use the last date of the month for which NIS is being calculated."
+    monthly_salary: 5000.00
+    bir_number: ""
+    pay_frequency: ""
+    tax_residency: ""
+    td1_annual_allowances: ""
+    approved_pension_or_annuity: ""
+    health_surcharge_exempt: ""
+    active: true

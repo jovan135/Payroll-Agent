@@ -1,0 +1,3 @@
+month,employee_id,surname,first_name,full_name,nis_number,date_of_birth,date_employed,last_work_date,monthly_salary,nis_class,monday_count,employee_weekly,employer_weekly,total_weekly,employee_contribution,employer_contribution,total_contribution
+2026-06,EMP001,Diaz-Cummings,Jhoneile,Jhoneile Diaz-Cummings,07 152 8487,1990-01-17,2020-09-01,2026-06-30,6000.00,VIII,5,75.30,150.60,225.90,376.50,753.00,1129.50
+2026-06,EMP002,Hosein,Marie,Marie Hosein,05 160 6676,1993-11-02,2023-01-09,2026-06-30,5000.00,VII,5,65.30,130.60,195.90,326.50,653.00,979.50
