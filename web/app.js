@@ -1,10 +1,30 @@
-const navItems = [
+import {
+  approveSignupRequest,
+  ensureUserProfile,
+  listenForAuth,
+  loadAdminSignupRequests,
+  loadCompanyEmployees,
+  loadMemberships,
+  loadMySignupRequests,
+  rejectSignupRequest,
+  requestCompanySignup,
+  saveCompanyEmployee,
+  signInWithGoogle,
+  signOutUser,
+} from "./firebase-client.js";
+
+const companyNavItems = [
   ["dashboard", "Dashboard"],
   ["employees", "Employees"],
   ["runs", "Payroll Runs"],
   ["payslips", "Payslips"],
   ["reports", "Reports"],
   ["settings", "Settings"],
+];
+
+const adminNavItems = [
+  ["admin", "Admin"],
+  ["companies", "Companies"],
 ];
 
 const fields = [
@@ -40,9 +60,34 @@ const defaultEmployee = {
   active: true,
 };
 
+let authUser = null;
+let userProfile = null;
+let memberships = [];
+let mySignupRequests = [];
+let adminSignupRequests = [];
+let selectedCompanyId = localStorage.getItem("selectedCompanyId") || "";
+let localWorkspace = localStorage.getItem("localWorkspace") === "true";
 let state = null;
 let activeView = "dashboard";
 let editing = null;
+let loadingMessage = "Connecting to Payroll Agent...";
+let backendUnavailable = false;
+
+function emptyLocalState() {
+  return {
+    employees: [],
+    runs: [],
+    alerts: [],
+    latest_run: null,
+    settings: {
+      schedule_enabled: false,
+      scheduled_day: 25,
+      scheduled_time: "17:00",
+      reminder_days_before: 3,
+      last_note: "Hosted payroll generation is not connected yet.",
+    },
+  };
+}
 
 function money(value) {
   return `TTD ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,6 +100,19 @@ function latestMonth() {
 
 function fullName(employee) {
   return `${employee.first_name || ""} ${employee.surname || ""}`.trim();
+}
+
+function isAdmin() {
+  return userProfile?.platformRole === "platform_admin";
+}
+
+function selectedMembership() {
+  return memberships.find((membership) => membership.id === selectedCompanyId) || null;
+}
+
+function currentCompanyName() {
+  if (localWorkspace) return "The J Spa and Skin Clinic LTD";
+  return selectedMembership()?.company?.name || selectedMembership()?.companyName || "No company selected";
 }
 
 function toast(message) {
@@ -75,16 +133,171 @@ async function api(path, options = {}) {
   return payload;
 }
 
-async function load() {
-  state = await api("/api/state");
-  render();
+async function loadLocalState() {
+  try {
+    state = await api("/api/state");
+    backendUnavailable = false;
+  } catch (error) {
+    state = emptyLocalState();
+    backendUnavailable = true;
+  }
+}
+
+async function refreshFirebaseState() {
+  if (!authUser) return;
+  userProfile = await ensureUserProfile(authUser);
+  memberships = await loadMemberships(authUser.uid);
+  mySignupRequests = await loadMySignupRequests(authUser.uid);
+  if (isAdmin()) {
+    adminSignupRequests = await loadAdminSignupRequests();
+  } else {
+    adminSignupRequests = [];
+  }
+  if (!selectedCompanyId && memberships.length) {
+    selectedCompanyId = memberships[0].id;
+    localStorage.setItem("selectedCompanyId", selectedCompanyId);
+  }
+}
+
+async function bootstrap() {
+  renderLoading();
+  listenForAuth(async (user) => {
+    authUser = user;
+    try {
+      if (authUser) {
+        loadingMessage = "Loading company workspace...";
+        renderLoading();
+        await refreshFirebaseState();
+        if (localWorkspace || selectedCompanyId || isAdmin()) {
+          await loadLocalState();
+        } else {
+          state = emptyLocalState();
+        }
+      }
+      render();
+    } catch (error) {
+      renderError(error);
+    }
+  });
+}
+
+function renderLoading() {
+  document.getElementById("app").innerHTML = `
+    <main class="auth-page">
+      <section class="auth-card">
+        <div class="brand-mark">PA</div>
+        <h1>Payroll Agent</h1>
+        <p>${loadingMessage}</p>
+      </section>
+    </main>
+  `;
+}
+
+function renderError(error) {
+  document.getElementById("app").innerHTML = `
+    <main class="auth-page">
+      <section class="auth-card wide">
+        <div class="brand-mark">PA</div>
+        <h1>Payroll Agent needs attention</h1>
+        <p>${escapeHtml(error.message)}</p>
+        <p class="caption">Check that Google sign-in is enabled, localhost is an authorized domain, and Firestore rules allow your account to read its profile.</p>
+        <button class="btn primary" onclick="window.location.reload()">Retry</button>
+      </section>
+    </main>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function renderLogin() {
+  return `
+    <main class="auth-page">
+      <section class="auth-card wide">
+        <div class="brand-mark">PA</div>
+        <h1>Payroll Agent</h1>
+        <p>Access an existing payroll workspace, or create a new company profile for approval.</p>
+        <div class="actions auth-actions">
+          <button class="btn primary" onclick="signIn('login')">Log in with Google</button>
+          <button class="btn" onclick="signIn('signup')">Sign up company</button>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+function renderOnboarding() {
+  const requests = mySignupRequests.map((request) => `
+    <div>
+      <span><strong>${escapeHtml(request.companyName)}</strong><br><span class="caption">${escapeHtml(request.status)}</span></span>
+      <span class="status ${request.status === "approved" ? "success" : request.status === "rejected" ? "danger" : "warning"}">${escapeHtml(request.status)}</span>
+    </div>
+  `).join("");
+
+  return `
+    <main class="auth-page">
+      ${firebaseSetupNotice()}
+      <section class="auth-card wide">
+        <div class="panel-head">
+          <div>
+            <div class="brand-mark">PA</div>
+            <h1>Create a company profile</h1>
+            <p>Submit a company request. After approval, the business gets its own payroll workspace.</p>
+          </div>
+          <button class="btn" onclick="signOut()">Sign out</button>
+        </div>
+        <div class="form-grid">
+          <label>Company name<input id="signup-company-name" type="text" placeholder="Company LTD"></label>
+          <label>Registration number<input id="signup-registration" type="text"></label>
+          <label>Phone<input id="signup-phone" type="text"></label>
+          <label>Contact name<input id="signup-contact" type="text" value="${escapeHtml(authUser?.displayName || "")}"></label>
+          <label>Contact email<input id="signup-email" type="email" value="${escapeHtml(authUser?.email || "")}" disabled></label>
+        </div>
+        <div class="actions" style="margin-top:16px">
+          <button class="btn primary" onclick="submitCompanySignup()">Submit company request</button>
+          <button class="btn" onclick="openLocalWorkspace()">Open local workspace</button>
+        </div>
+      </section>
+      <section class="auth-card wide">
+        <h2>My company requests</h2>
+        <div class="activity">${requests || "<p>No company requests yet.</p>"}</div>
+      </section>
+      <section class="auth-card wide">
+        <h2>Admin access setup</h2>
+        <p>To unlock the administrator portal, deploy the Firestore rules, sign in once, then set your Firestore user document field <code>platformRole</code> to <code>platform_admin</code>. Future backend functions can move this to secure custom claims.</p>
+      </section>
+    </main>
+  `;
+}
+
+function firebaseSetupNotice() {
+  if (!userProfile?.firebaseSetupIssue) return "";
+  return `
+    <section class="auth-card wide notice-card">
+      <h2>Firebase database permissions need setup</h2>
+      <p>Google sign-in is working, but Firestore rejected profile access. Deploy the rules in <code>firebase/firestore.rules</code> and <code>firebase/storage.rules</code>, or temporarily allow signed-in users while testing.</p>
+      <p class="caption">${escapeHtml(userProfile.firebaseSetupMessage)}</p>
+    </section>
+  `;
 }
 
 function shell(content) {
+  const navItems = isAdmin() ? [...companyNavItems, ...adminNavItems] : companyNavItems;
   const nav = navItems.map(([id, label]) => `
     <button class="${activeView === id ? "active" : ""}" onclick="setView('${id}')">
       <span>${icon(id)}</span>${label}
     </button>
+  `).join("");
+
+  const companyOptions = memberships.map((membership) => `
+    <option value="${membership.id}" ${membership.id === selectedCompanyId && !localWorkspace ? "selected" : ""}>
+      ${escapeHtml(membership.company?.name || membership.companyName || membership.id)}
+    </option>
   `).join("");
 
   return `
@@ -92,12 +305,21 @@ function shell(content) {
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-mark">PA</div>
-          <div><strong>Payroll Agent</strong><span>The J Spa and Skin Clinic LTD</span></div>
+          <div><strong>Payroll Agent</strong><span>${escapeHtml(currentCompanyName())}</span></div>
+        </div>
+        <div class="tenant-switcher">
+          <label>Company
+            <select onchange="selectCompany(this.value)">
+              ${localWorkspace ? `<option value="local" selected>Local workspace</option>` : ""}
+              ${companyOptions}
+            </select>
+          </label>
         </div>
         <nav class="nav">${nav}</nav>
         <div class="side-note">
-          Next scheduled run<br>
-          <strong>${state.settings.schedule_enabled ? `${state.settings.scheduled_day} at ${state.settings.scheduled_time}` : "Not enabled"}</strong>
+          Signed in<br>
+          <strong>${escapeHtml(authUser?.email || "")}</strong>
+          <button class="link-button" onclick="signOut()">Sign out</button>
         </div>
       </aside>
       <main class="main">
@@ -106,14 +328,22 @@ function shell(content) {
             <h1>${titleFor(activeView)}</h1>
             <p>${subtitleFor(activeView)}</p>
           </div>
-          <div class="actions">
-            <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}">
-            <label class="inline-check"><input id="generateNisForms" type="checkbox" checked> NIS forms</label>
-            <button class="btn primary" onclick="runPayroll()">Run payroll</button>
-          </div>
+          ${topbarActions()}
         </div>
         ${content}
       </main>
+    </div>
+  `;
+}
+
+function topbarActions() {
+  if (activeView === "admin" || activeView === "companies") return "";
+  const disabled = backendUnavailable ? "disabled" : "";
+  return `
+    <div class="actions">
+      <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}" ${disabled}>
+      <label class="inline-check"><input id="generateNisForms" type="checkbox" checked ${disabled}> NIS forms</label>
+      <button class="btn primary" onclick="runPayroll()" ${disabled}>Run payroll</button>
     </div>
   `;
 }
@@ -126,43 +356,51 @@ function icon(id) {
     payslips: "□",
     reports: "◫",
     settings: "⚙",
-  }[id];
+    admin: "★",
+    companies: "▤",
+  }[id] || "□";
 }
 
 function titleFor(id) {
   return {
-    dashboard: "July 2026 Payroll",
+    dashboard: `${state.latest_run?.month || "Current"} Payroll`,
     employees: "Employees",
     runs: "Payroll Runs",
     payslips: "Payslips",
     reports: "Reports",
     settings: "Settings",
+    admin: "Administrator",
+    companies: "Companies",
   }[id];
 }
 
 function subtitleFor(id) {
   return {
-    dashboard: "Track changes, reminders, scheduled runs, and payroll readiness.",
-    employees: "Add and maintain employee records used by NIS, PAYE, and payslips.",
-    runs: "Review previously generated payroll files and statutory outputs.",
-    payslips: "Open generated employee payslips by month.",
+    dashboard: "Track company payroll readiness, reminders, statutory forms, and monthly runs.",
+    employees: "Add and maintain employee records used by NIS, PAYE, Health Surcharge, and payslips.",
+    runs: "Review generated payroll files, payslips, NI184, and NI187 outputs.",
+    payslips: "Open generated payslips grouped by employee.",
     reports: "Compare gross pay, deductions, net pay, and employer costs.",
     settings: "Control reminder timing and scheduled payroll preferences.",
+    admin: "Approve company signups and monitor account onboarding.",
+    companies: "Review company memberships available to your account.",
   }[id];
 }
 
 function dashboard() {
+  state ||= emptyLocalState();
   const activeEmployees = state.employees.filter((employee) => employee.active).length;
   const latest = state.latest_run || {};
   const alerts = state.alerts.map((alert) => `
     <div>
-      <strong>${alert.title}</strong>
+      <strong>${escapeHtml(alert.title)}</strong>
       <span class="status warning">Pending changes</span>
     </div>
-    <p>${alert.body}</p>
+    <p>${escapeHtml(alert.body)}</p>
   `).join("") || `<p>No pending employee record reminders.</p>`;
 
   return `
+    ${phaseBanner()}
     <div class="grid kpis">
       ${metric("Active employees", activeEmployees)}
       ${metric("Latest net pay", money(latest.net))}
@@ -176,7 +414,7 @@ function dashboard() {
       </section>
       <section class="panel">
         <div class="panel-head"><h2>Next scheduled run</h2><span class="status neutral">${state.settings.schedule_enabled ? "Enabled" : "Paused"}</span></div>
-        <p>${state.settings.last_note}</p>
+        <p>${escapeHtml(state.settings.last_note)}</p>
         <div class="activity">
           <div><span>Run day</span><strong>${state.settings.scheduled_day}</strong></div>
           <div><span>Run time</span><strong>${state.settings.scheduled_time}</strong></div>
@@ -197,6 +435,21 @@ function dashboard() {
   `;
 }
 
+function phaseBanner() {
+  const setup = userProfile?.firebaseSetupIssue
+    ? " Firestore permissions still need setup before company signup requests can be saved."
+    : "";
+  const backend = backendUnavailable
+    ? " The hosted site is online for authentication and company onboarding; payroll generation still requires the local Python engine until the backend is moved to serverless hosting."
+    : "";
+  return `
+    <section class="notice">
+      <strong>Multi-company foundation active.</strong>
+      Google sign-in, company requests, memberships, and admin approvals use Firebase. Payroll generation still runs through the local Python engine in this phase.${setup}${backend}
+    </section>
+  `;
+}
+
 function metric(label, value) {
   return `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`;
 }
@@ -207,9 +460,9 @@ function employeeTable(rows) {
       <thead><tr><th>ID</th><th>Name</th><th>NIS</th><th class="money">Salary</th><th>Status</th></tr></thead>
       <tbody>${rows.map((employee) => `
         <tr>
-          <td>${employee.employee_id}</td>
-          <td>${fullName(employee)}</td>
-          <td>${employee.nis_number || ""}</td>
+          <td>${escapeHtml(employee.employee_id)}</td>
+          <td>${escapeHtml(fullName(employee))}</td>
+          <td>${escapeHtml(employee.nis_number || "")}</td>
           <td class="money">${money(employee.monthly_salary)}</td>
           <td><span class="status ${employee.active ? "success" : "neutral"}">${employee.active ? "Active" : "Inactive"}</span></td>
         </tr>
@@ -219,24 +472,26 @@ function employeeTable(rows) {
 }
 
 function employeesView() {
+  state ||= emptyLocalState();
   const employee = editing || defaultEmployee;
   const form = fields.map(([key, label, type]) => `
     <label>${label}
-      <input id="field-${key}" type="${type}" value="${employee[key] ?? ""}" ${type === "number" ? 'step="0.01"' : ""}>
+      <input id="field-${key}" type="${type}" value="${escapeHtml(employee[key] ?? "")}" ${type === "number" ? 'step="0.01"' : ""}>
     </label>
   `).join("");
 
   return `
     <section class="panel">
       <div class="panel-head">
-        <h2>${editing ? `Edit ${editing.employee_id}` : "Add employee"}</h2>
+        <h2>${editing ? `Edit ${escapeHtml(editing.employee_id)}` : "Add employee"}</h2>
         <div class="actions">
           <button class="btn" onclick="clearEmployeeForm()">New</button>
-          <button class="btn primary" onclick="saveEmployee()">Submit changes</button>
+          <button class="btn primary" onclick="saveEmployee()" ${backendUnavailable ? "disabled" : ""}>Submit changes</button>
         </div>
       </div>
       <div class="form-grid">${form}</div>
       <label style="margin-top:12px"><span><input id="field-active" type="checkbox" ${employee.active ? "checked" : ""} style="width:auto;min-height:auto"> Active employee</span></label>
+      <p class="caption">Employee changes are saved to the local payroll engine. When a Firebase company is selected, the record is also mirrored to that company's Firestore employee collection.</p>
     </section>
     <section class="panel" style="margin-top:16px">
       <div class="panel-head"><h2>Employee list</h2><span class="status neutral">${state.employees.length} records</span></div>
@@ -244,12 +499,12 @@ function employeesView() {
         <thead><tr><th>ID</th><th>Name</th><th>NIS</th><th>BIR</th><th class="money">Salary</th><th></th></tr></thead>
         <tbody>${state.employees.map((employee) => `
           <tr>
-            <td>${employee.employee_id}</td>
-            <td>${fullName(employee)}</td>
-            <td>${employee.nis_number || ""}</td>
-            <td>${employee.bir_number || ""}</td>
+            <td>${escapeHtml(employee.employee_id)}</td>
+            <td>${escapeHtml(fullName(employee))}</td>
+            <td>${escapeHtml(employee.nis_number || "")}</td>
+            <td>${escapeHtml(employee.bir_number || "")}</td>
             <td class="money">${money(employee.monthly_salary)}</td>
-            <td class="right"><button class="btn" onclick="editEmployee('${employee.employee_id}')">Edit</button></td>
+            <td class="right"><button class="btn" onclick="editEmployee('${escapeHtml(employee.employee_id)}')">Edit</button></td>
           </tr>
         `).join("")}</tbody>
       </table>
@@ -258,6 +513,7 @@ function employeesView() {
 }
 
 function runsView() {
+  state ||= emptyLocalState();
   return `<section class="panel"><div class="panel-head"><h2>Payroll Runs</h2><span class="status neutral">${state.runs.length} months</span></div>${runTable(state.runs)}</section>`;
 }
 
@@ -265,7 +521,7 @@ function runList(runs) {
   if (!runs.length) return `<p>No payroll runs found.</p>`;
   return `<div class="activity">${runs.map((run) => `
     <div>
-      <span><strong>${run.month}</strong><br><span class="caption">${run.employees} employee(s), ${run.has_payroll ? "payroll complete" : "NIS only"}</span></span>
+      <span><strong>${escapeHtml(run.month)}</strong><br><span class="caption">${run.employees} employee(s), ${run.has_payroll ? "payroll complete" : "NIS only"}</span></span>
       <span class="right"><strong>${money(run.net)}</strong><br>${formBadges(run)}</span>
     </div>
   `).join("")}</div>`;
@@ -284,7 +540,7 @@ function runTable(runs) {
       <thead><tr><th>Month</th><th>Employees</th><th>Payroll</th><th>NIS Forms</th><th class="money">Net Pay</th></tr></thead>
       <tbody>${runs.map((run) => `
         <tr>
-          <td>${run.month}</td>
+          <td>${escapeHtml(run.month)}</td>
           <td>${run.employees}</td>
           <td><span class="status ${run.has_payroll ? "success" : "neutral"}">${run.has_payroll ? "Complete" : "NIS only"}</span></td>
           <td>${formBadges(run)}</td>
@@ -296,6 +552,7 @@ function runTable(runs) {
 }
 
 function payslipsView() {
+  state ||= emptyLocalState();
   const employeeMap = new Map(state.employees.map((employee) => [employee.employee_id, employee]));
   const grouped = new Map();
   state.runs.forEach((run) => {
@@ -321,11 +578,11 @@ function payslipsView() {
       ${groups.map((group) => `
         <div class="employee-payslip-group">
           <div class="employee-payslip-head">
-            <div><strong>${group.name}</strong><br><span class="caption">${group.employeeId}</span></div>
+            <div><strong>${escapeHtml(group.name)}</strong><br><span class="caption">${escapeHtml(group.employeeId)}</span></div>
             <span class="status neutral">${group.files.length} payslip${group.files.length === 1 ? "" : "s"}</span>
           </div>
           <div class="activity">
-            ${group.files.map((item) => `<a href="/runs/${item.month}/payslips/${item.file}" target="_blank"><span>${item.month}</span><strong>Open payslip</strong></a>`).join("")}
+            ${group.files.map((item) => `<a href="/runs/${item.month}/payslips/${item.file}" target="_blank"><span>${escapeHtml(item.month)}</span><strong>Open payslip</strong></a>`).join("")}
           </div>
         </div>
       `).join("") || "<p>No payslips generated yet.</p>"}
@@ -334,13 +591,14 @@ function payslipsView() {
 }
 
 function reportsView() {
+  state ||= emptyLocalState();
   return `
     <section class="panel">
       <div class="panel-head"><h2>Reports</h2><span class="status neutral">Historical totals</span></div>
       <table>
         <thead><tr><th>Month</th><th class="money">Gross</th><th class="money">Deductions</th><th class="money">Net Pay</th><th>Payslips</th><th>NIS Forms</th></tr></thead>
         <tbody>${state.runs.map((run) => `
-          <tr><td>${run.month}</td><td class="money">${money(run.gross)}</td><td class="money">${money(run.deductions)}</td><td class="money">${money(run.net)}</td><td>${run.payslips.length}</td><td>${formBadges(run)}</td></tr>
+          <tr><td>${escapeHtml(run.month)}</td><td class="money">${money(run.gross)}</td><td class="money">${money(run.deductions)}</td><td class="money">${money(run.net)}</td><td>${run.payslips.length}</td><td>${formBadges(run)}</td></tr>
         `).join("")}</tbody>
       </table>
     </section>
@@ -348,43 +606,197 @@ function reportsView() {
 }
 
 function settingsView() {
+  state ||= emptyLocalState();
   return `
     <section class="panel">
-      <div class="panel-head"><h2>Schedule and reminders</h2><button class="btn primary" onclick="saveSettings()">Save settings</button></div>
+      <div class="panel-head"><h2>Schedule and reminders</h2><button class="btn primary" onclick="saveSettings()" ${backendUnavailable ? "disabled" : ""}>Save settings</button></div>
       <div class="form-grid">
         <label>Scheduled day<input id="scheduled_day" type="number" min="1" max="31" value="${state.settings.scheduled_day}"></label>
         <label>Scheduled time<input id="scheduled_time" type="time" value="${state.settings.scheduled_time}"></label>
         <label>Reminder days before<input id="reminder_days_before" type="number" min="0" max="14" value="${state.settings.reminder_days_before}"></label>
       </div>
       <label style="margin-top:12px"><span><input id="schedule_enabled" type="checkbox" ${state.settings.schedule_enabled ? "checked" : ""} style="width:auto;min-height:auto"> Enable scheduled payroll reminder</span></label>
-      <p>This app stores the schedule preference locally. A background Windows task or Codex automation can be wired next to run payroll even when the browser is closed.</p>
+      <p>This app stores the schedule preference locally. Scheduled Firebase/Cloud Run execution is the next backend phase.</p>
+    </section>
+  `;
+}
+
+function adminView() {
+  const pending = adminSignupRequests.filter((request) => request.status === "pending");
+  return `
+    <section class="panel">
+      <div class="panel-head"><h2>Company signup requests</h2><span class="status warning">${pending.length} pending</span></div>
+      <table>
+        <thead><tr><th>Company</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+        <tbody>${adminSignupRequests.map((request) => `
+          <tr>
+            <td><strong>${escapeHtml(request.companyName)}</strong><br><span class="caption">${escapeHtml(request.registrationNumber || "")}</span></td>
+            <td>${escapeHtml(request.contactName || "")}<br><span class="caption">${escapeHtml(request.contactEmail || request.requestedByEmail || "")}</span></td>
+            <td><span class="status ${request.status === "approved" ? "success" : request.status === "rejected" ? "danger" : "warning"}">${escapeHtml(request.status)}</span></td>
+            <td class="right">
+              ${request.status === "pending" ? `
+                <button class="btn primary" onclick="approveSignup('${request.id}')">Approve</button>
+                <button class="btn" onclick="rejectSignup('${request.id}')">Reject</button>
+              ` : ""}
+            </td>
+          </tr>
+        `).join("") || `<tr><td colspan="4">No signup requests found.</td></tr>`}</tbody>
+      </table>
+    </section>
+  `;
+}
+
+function companiesView() {
+  return `
+    <section class="panel">
+      <div class="panel-head"><h2>My companies</h2><span class="status neutral">${memberships.length} memberships</span></div>
+      <table>
+        <thead><tr><th>Company</th><th>Role</th><th>Status</th><th></th></tr></thead>
+        <tbody>${memberships.map((membership) => `
+          <tr>
+            <td>${escapeHtml(membership.company?.name || membership.companyName || membership.id)}</td>
+            <td>${escapeHtml(membership.role || "")}</td>
+            <td><span class="status ${membership.status === "active" ? "success" : "neutral"}">${escapeHtml(membership.status || "active")}</span></td>
+            <td class="right"><button class="btn" onclick="selectCompany('${membership.id}')">Open</button></td>
+          </tr>
+        `).join("") || `<tr><td colspan="4">No approved company memberships yet.</td></tr>`}</tbody>
+      </table>
     </section>
   `;
 }
 
 function render() {
-  if (!state) return;
-  const views = { dashboard, employees: employeesView, runs: runsView, payslips: payslipsView, reports: reportsView, settings: settingsView };
+  if (!authUser) {
+    document.getElementById("app").innerHTML = renderLogin();
+    return;
+  }
+
+  if (!localWorkspace && !selectedCompanyId && !isAdmin()) {
+    document.getElementById("app").innerHTML = renderOnboarding();
+    return;
+  }
+
+  if (!localWorkspace && !selectedCompanyId && isAdmin() && activeView === "dashboard") {
+    activeView = "admin";
+  }
+
+  const views = {
+    dashboard,
+    employees: employeesView,
+    runs: runsView,
+    payslips: payslipsView,
+    reports: reportsView,
+    settings: settingsView,
+    admin: adminView,
+    companies: companiesView,
+  };
+
+  if (!views[activeView] || (!isAdmin() && (activeView === "admin" || activeView === "companies"))) {
+    activeView = "dashboard";
+  }
+
   document.getElementById("app").innerHTML = shell(views[activeView]());
 }
 
-function setView(view) {
-  activeView = view;
+async function hydrateAfterWrite(message) {
+  await refreshFirebaseState();
+  await loadLocalState();
+  toast(message);
   render();
 }
 
-function editEmployee(employeeId) {
+window.signIn = async function signIn(intent = "login") {
+  try {
+    localStorage.setItem("authIntent", intent);
+    if (window.location.hostname === "127.0.0.1") {
+      window.location.href = window.location.href.replace("127.0.0.1", "localhost");
+      return;
+    }
+    await signInWithGoogle();
+  } catch (error) {
+    const message = error.code === "auth/unauthorized-domain"
+      ? "Firebase has not authorized this domain. Add localhost and 127.0.0.1 in Firebase Authentication > Settings > Authorized domains."
+      : error.message;
+    toast(message);
+  }
+};
+
+window.signOut = async function signOut() {
+  await signOutUser();
+  authUser = null;
+  userProfile = null;
+  memberships = [];
+  localWorkspace = false;
+  selectedCompanyId = "";
+  localStorage.removeItem("localWorkspace");
+  localStorage.removeItem("selectedCompanyId");
+  render();
+};
+
+window.submitCompanySignup = async function submitCompanySignup() {
+  const companyName = document.getElementById("signup-company-name").value.trim();
+  if (!companyName) return toast("Company name is required.");
+  try {
+    await requestCompanySignup(authUser, {
+      companyName,
+      registrationNumber: document.getElementById("signup-registration").value.trim(),
+      phone: document.getElementById("signup-phone").value.trim(),
+      contactName: document.getElementById("signup-contact").value.trim(),
+    });
+    await hydrateAfterWrite("Company request submitted.");
+  } catch (error) {
+    const message = error.code === "permission-denied"
+      ? "Firestore rules are blocking signup requests. Deploy the rules in the firebase folder, then retry."
+      : error.message;
+    toast(message);
+  }
+};
+
+window.openLocalWorkspace = async function openLocalWorkspace() {
+  localWorkspace = true;
+  selectedCompanyId = "";
+  localStorage.setItem("localWorkspace", "true");
+  localStorage.removeItem("selectedCompanyId");
+  await loadLocalState();
+  render();
+};
+
+window.selectCompany = async function selectCompany(companyId) {
+  if (companyId === "local") {
+    await window.openLocalWorkspace();
+    return;
+  }
+  localWorkspace = false;
+  selectedCompanyId = companyId;
+  localStorage.setItem("selectedCompanyId", companyId);
+  localStorage.removeItem("localWorkspace");
+  await loadLocalState();
+  try {
+    await loadCompanyEmployees(companyId);
+  } catch {
+    // Firestore employee mirroring is optional until rules are deployed.
+  }
+  activeView = "dashboard";
+  render();
+};
+
+window.setView = function setView(view) {
+  activeView = view;
+  render();
+};
+
+window.editEmployee = function editEmployee(employeeId) {
   editing = { ...state.employees.find((employee) => employee.employee_id === employeeId) };
   activeView = "employees";
   render();
-}
+};
 
-function clearEmployeeForm() {
+window.clearEmployeeForm = function clearEmployeeForm() {
   editing = null;
   render();
-}
+};
 
-async function saveEmployee() {
+window.saveEmployee = async function saveEmployee() {
   const employee = { ...defaultEmployee };
   fields.forEach(([key, , type]) => {
     const value = document.getElementById(`field-${key}`).value;
@@ -395,15 +807,18 @@ async function saveEmployee() {
   try {
     const payload = await api("/api/employees", { method: "POST", body: JSON.stringify(employee) });
     state = payload.state;
+    if (!localWorkspace && selectedCompanyId) {
+      await saveCompanyEmployee(selectedCompanyId, employee);
+    }
     editing = null;
     toast(`Employee ${payload.status}.`);
     render();
   } catch (error) {
     toast(error.message);
   }
-}
+};
 
-async function saveSettings() {
+window.saveSettings = async function saveSettings() {
   const settings = {
     schedule_enabled: document.getElementById("schedule_enabled").checked,
     scheduled_day: Number(document.getElementById("scheduled_day").value),
@@ -419,9 +834,9 @@ async function saveSettings() {
   } catch (error) {
     toast(error.message);
   }
-}
+};
 
-async function runPayroll() {
+window.runPayroll = async function runPayroll() {
   const month = document.getElementById("runMonth").value;
   const generateNisForms = document.getElementById("generateNisForms").checked;
   if (!month) return toast("Choose a payroll month.");
@@ -438,8 +853,18 @@ async function runPayroll() {
   } catch (error) {
     toast(error.message);
   }
-}
+};
 
-load().catch((error) => {
-  document.getElementById("app").innerHTML = `<div class="main"><section class="panel"><h1>Payroll Agent</h1><p>${error.message}</p></section></div>`;
-});
+window.approveSignup = async function approveSignup(requestId) {
+  const request = adminSignupRequests.find((item) => item.id === requestId);
+  if (!request) return toast("Signup request not found.");
+  await approveSignupRequest(request);
+  await hydrateAfterWrite("Company approved.");
+};
+
+window.rejectSignup = async function rejectSignup(requestId) {
+  await rejectSignupRequest(requestId);
+  await hydrateAfterWrite("Company request rejected.");
+};
+
+bootstrap();

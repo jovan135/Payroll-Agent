@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isPlatformAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.platformRole == "platform_admin";
+    }
+
+    function isCompanyMember(companyId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.status == "active";
+    }
+
+    function isCompanyAdmin(companyId) {
+      return isCompanyMember(companyId)
+        && get(/databases/$(database)/documents/companies/$(companyId)/members/$(request.auth.uid)).data.role in ["company_owner", "payroll_admin"];
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.platformRole == "user";
+      allow read: if signedIn() && (request.auth.uid == userId || isPlatformAdmin());
+      allow update: if isPlatformAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.platformRole == resource.data.platformRole
+        );
+
+      match /memberships/{companyId} {
+        allow read: if signedIn() && (request.auth.uid == userId || isPlatformAdmin());
+        allow write: if isPlatformAdmin();
+      }
+    }
+
+    match /signupRequests/{requestId} {
+      allow create: if signedIn() && request.resource.data.requestedByUid == request.auth.uid;
+      allow read: if isPlatformAdmin() || (signedIn() && resource.data.requestedByUid == request.auth.uid);
+      allow update: if isPlatformAdmin();
+    }
+
+    match /companies/{companyId} {
+      allow read: if isCompanyMember(companyId) || isPlatformAdmin();
+      allow create, update: if isPlatformAdmin();
+
+      match /members/{userId} {
+        allow read: if isCompanyMember(companyId) || isPlatformAdmin();
+        allow write: if isPlatformAdmin() || isCompanyAdmin(companyId);
+      }
+
+      match /employees/{employeeId} {
+        allow read: if isCompanyMember(companyId) || isPlatformAdmin();
+        allow write: if isCompanyAdmin(companyId) || isPlatformAdmin();
+      }
+
+      match /payrollRuns/{runId} {
+        allow read: if isCompanyMember(companyId) || isPlatformAdmin();
+        allow write: if isCompanyAdmin(companyId) || isPlatformAdmin();
+      }
+
+      match /changeRequests/{changeId} {
+        allow read: if isCompanyMember(companyId) || isPlatformAdmin();
+        allow write: if isCompanyAdmin(companyId) || isPlatformAdmin();
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isCompanyAdmin(companyId) || isPlatformAdmin();
+        allow create: if isCompanyMember(companyId) || isPlatformAdmin();
+      }
+    }
+  }
+}
