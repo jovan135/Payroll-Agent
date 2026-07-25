@@ -289,7 +289,6 @@ function renderOnboarding() {
         </div>
         <div class="actions" style="margin-top:16px">
           <button class="btn primary" onclick="submitCompanySignup()">Submit company request</button>
-          <button class="btn" onclick="openLocalWorkspace()">Open local workspace</button>
         </div>
       </section>
       <section class="auth-card wide">
