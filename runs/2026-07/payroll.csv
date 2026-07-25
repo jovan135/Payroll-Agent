@@ -1,3 +1,4 @@
 month,employee_id,full_name,nis_number,bir_number,regular_earnings,gross_pay,annualized_income,annual_personal_allowance,td1_annual_allowances,approved_pension_or_annuity,annual_chargeable_income,annual_paye,paye,nis_employee,health_surcharge,total_deductions,net_pay,nis_employer
 2026-07,EMP001,Jhoneile Diaz-Cummings,07 152 8487,,6000.00,6000.00,72000.00,90000.00,0.00,0.00,0.00,0.00,0.00,301.20,33.00,334.20,5665.80,602.40
 2026-07,EMP002,Marie Hosein,05 160 6676,,5000.00,5000.00,60000.00,90000.00,0.00,0.00,0.00,0.00,0.00,261.20,33.00,294.20,4705.80,522.40
+2026-07,EMP003,Daniella Hernandez,01 140 0338,,5000.00,5000.00,60000.00,90000.00,0.00,0.00,0.00,0.00,0.00,261.20,33.00,294.20,4705.80,522.40
