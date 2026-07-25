@@ -67,6 +67,7 @@ let mySignupRequests = [];
 let adminSignupRequests = [];
 let selectedCompanyId = localStorage.getItem("selectedCompanyId") || "";
 let localWorkspace = localStorage.getItem("localWorkspace") === "true";
+let authIntent = localStorage.getItem("authIntent") || "login";
 let state = null;
 let activeView = "dashboard";
 let editing = null;
@@ -153,7 +154,12 @@ async function refreshFirebaseState() {
   } else {
     adminSignupRequests = [];
   }
-  if (!selectedCompanyId && memberships.length) {
+  if (authIntent === "signup") {
+    selectedCompanyId = "";
+    localWorkspace = false;
+    localStorage.removeItem("selectedCompanyId");
+    localStorage.removeItem("localWorkspace");
+  } else if (!selectedCompanyId && memberships.length) {
     selectedCompanyId = memberships[0].id;
     localStorage.setItem("selectedCompanyId", selectedCompanyId);
   }
@@ -168,7 +174,9 @@ async function bootstrap() {
         loadingMessage = "Loading company workspace...";
         renderLoading();
         await refreshFirebaseState();
-        if (localWorkspace || selectedCompanyId || isAdmin()) {
+        if (authIntent === "signup") {
+          state = emptyLocalState();
+        } else if (localWorkspace || selectedCompanyId || isAdmin()) {
           await loadLocalState();
         } else {
           state = emptyLocalState();
@@ -671,6 +679,11 @@ function render() {
     return;
   }
 
+  if (authIntent === "signup") {
+    document.getElementById("app").innerHTML = renderOnboarding();
+    return;
+  }
+
   if (!localWorkspace && !selectedCompanyId && !isAdmin()) {
     document.getElementById("app").innerHTML = renderOnboarding();
     return;
@@ -707,12 +720,13 @@ async function hydrateAfterWrite(message) {
 
 window.signIn = async function signIn(intent = "login") {
   try {
+    authIntent = intent;
     localStorage.setItem("authIntent", intent);
     if (window.location.hostname === "127.0.0.1") {
       window.location.href = window.location.href.replace("127.0.0.1", "localhost");
       return;
     }
-    await signInWithGoogle();
+    await signInWithGoogle({ promptSelectAccount: intent === "signup" });
   } catch (error) {
     const message = error.code === "auth/unauthorized-domain"
       ? "Firebase has not authorized this domain. Add localhost and 127.0.0.1 in Firebase Authentication > Settings > Authorized domains."
@@ -728,8 +742,10 @@ window.signOut = async function signOut() {
   memberships = [];
   localWorkspace = false;
   selectedCompanyId = "";
+  authIntent = "login";
   localStorage.removeItem("localWorkspace");
   localStorage.removeItem("selectedCompanyId");
+  localStorage.removeItem("authIntent");
   render();
 };
 
@@ -755,8 +771,10 @@ window.submitCompanySignup = async function submitCompanySignup() {
 window.openLocalWorkspace = async function openLocalWorkspace() {
   localWorkspace = true;
   selectedCompanyId = "";
+  authIntent = "login";
   localStorage.setItem("localWorkspace", "true");
   localStorage.removeItem("selectedCompanyId");
+  localStorage.setItem("authIntent", authIntent);
   await loadLocalState();
   render();
 };
@@ -768,8 +786,10 @@ window.selectCompany = async function selectCompany(companyId) {
   }
   localWorkspace = false;
   selectedCompanyId = companyId;
+  authIntent = "login";
   localStorage.setItem("selectedCompanyId", companyId);
   localStorage.removeItem("localWorkspace");
+  localStorage.setItem("authIntent", authIntent);
   await loadLocalState();
   try {
     await loadCompanyEmployees(companyId);

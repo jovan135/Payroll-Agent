@@ -24,8 +24,6 @@ import { firebaseConfig } from "./firebase-config.js";
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
-
 function isPermissionError(error) {
   return error?.code === "permission-denied" || String(error?.message || "").includes("Missing or insufficient permissions");
 }
@@ -47,7 +45,11 @@ export function listenForAuth(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(options = {}) {
+  const provider = new GoogleAuthProvider();
+  if (options.promptSelectAccount) {
+    provider.setCustomParameters({ prompt: "select_account" });
+  }
   const result = await signInWithPopup(auth, provider);
   return result.user;
 }
