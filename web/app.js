@@ -259,12 +259,33 @@ function renderOnboarding() {
           </div>
           <button class="btn" onclick="signOut()">Sign out</button>
         </div>
-        <div class="form-grid">
-          <label>Company name<input id="signup-company-name" type="text" placeholder="Company LTD"></label>
-          <label>Registration number<input id="signup-registration" type="text"></label>
-          <label>Phone<input id="signup-phone" type="text"></label>
-          <label>Contact name<input id="signup-contact" type="text" value="${escapeHtml(authUser?.displayName || "")}"></label>
-          <label>Contact email<input id="signup-email" type="email" value="${escapeHtml(authUser?.email || "")}" disabled></label>
+        <div class="form-section">
+          <h2>Company details</h2>
+          <div class="form-grid">
+            <label>Legal company name<input id="signup-company-name" type="text" placeholder="Company LTD"></label>
+            <label>Trade name used on NIB forms<input id="signup-trade-name" type="text" placeholder="Company trading name"></label>
+            <label>NIB employer registration number<input id="signup-nib-registration" type="text" placeholder="Employer registration number"></label>
+            <label>Phone<input id="signup-phone" type="text"></label>
+          </div>
+          <p class="caption">The NIB employer registration number is the employer number issued by the National Insurance Board. It is not the same thing as a Companies Registry incorporation number unless NIB assigned the same value.</p>
+        </div>
+        <div class="form-section">
+          <h2>Employer address</h2>
+          <div class="form-grid">
+            <label>Address line 1<input id="signup-address-line1" type="text" placeholder="Street address"></label>
+            <label>Address line 2<input id="signup-address-line2" type="text" placeholder="Optional"></label>
+            <label>City / area<input id="signup-city" type="text"></label>
+            <label>Country<input id="signup-country" type="text" value="Trinidad and Tobago"></label>
+          </div>
+        </div>
+        <div class="form-section">
+          <h2>Contact and declaration</h2>
+          <div class="form-grid">
+            <label>Contact name<input id="signup-contact" type="text" value="${escapeHtml(authUser?.displayName || "")}"></label>
+            <label>Contact email<input id="signup-email" type="email" value="${escapeHtml(authUser?.email || "")}" disabled></label>
+            <label>NIB declarant name<input id="signup-declarant-name" type="text" placeholder="Person signing/submitting NIB forms"></label>
+            <label>NIB declarant position<input id="signup-declarant-position" type="text" placeholder="Owner, Manager, Payroll Officer"></label>
+          </div>
         </div>
         <div class="actions" style="margin-top:16px">
           <button class="btn primary" onclick="submitCompanySignup()">Submit company request</button>
@@ -274,10 +295,6 @@ function renderOnboarding() {
       <section class="auth-card wide">
         <h2>My company requests</h2>
         <div class="activity">${requests || "<p>No company requests yet.</p>"}</div>
-      </section>
-      <section class="auth-card wide">
-        <h2>Admin access setup</h2>
-        <p>To unlock the administrator portal, deploy the Firestore rules, sign in once, then set your Firestore user document field <code>platformRole</code> to <code>platform_admin</code>. Future backend functions can move this to secure custom claims.</p>
       </section>
     </main>
   `;
@@ -638,8 +655,16 @@ function adminView() {
         <thead><tr><th>Company</th><th>Contact</th><th>Status</th><th></th></tr></thead>
         <tbody>${adminSignupRequests.map((request) => `
           <tr>
-            <td><strong>${escapeHtml(request.companyName)}</strong><br><span class="caption">${escapeHtml(request.registrationNumber || "")}</span></td>
-            <td>${escapeHtml(request.contactName || "")}<br><span class="caption">${escapeHtml(request.contactEmail || request.requestedByEmail || "")}</span></td>
+            <td>
+              <strong>${escapeHtml(request.companyName)}</strong><br>
+              <span class="caption">${escapeHtml(request.tradeName || request.companyName || "")}</span><br>
+              <span class="caption">${escapeHtml([request.address?.line1, request.address?.city].filter(Boolean).join(", "))}</span>
+            </td>
+            <td>
+              ${escapeHtml(request.contactName || "")}<br>
+              <span class="caption">${escapeHtml(request.contactEmail || request.requestedByEmail || "")}</span><br>
+              <span class="caption">NIB employer no. ${escapeHtml(request.nibEmployerRegistrationNumber || "not provided")}</span>
+            </td>
             <td><span class="status ${request.status === "approved" ? "success" : request.status === "rejected" ? "danger" : "warning"}">${escapeHtml(request.status)}</span></td>
             <td class="right">
               ${request.status === "pending" ? `
@@ -751,13 +776,29 @@ window.signOut = async function signOut() {
 
 window.submitCompanySignup = async function submitCompanySignup() {
   const companyName = document.getElementById("signup-company-name").value.trim();
+  const nibEmployerRegistrationNumber = document.getElementById("signup-nib-registration").value.trim();
+  const addressLine1 = document.getElementById("signup-address-line1").value.trim();
+  const city = document.getElementById("signup-city").value.trim();
   if (!companyName) return toast("Company name is required.");
+  if (!nibEmployerRegistrationNumber) return toast("NIB employer registration number is required for NIB forms.");
+  if (!addressLine1 || !city) return toast("Address line 1 and city are required for NIB forms.");
   try {
     await requestCompanySignup(authUser, {
       companyName,
-      registrationNumber: document.getElementById("signup-registration").value.trim(),
+      tradeName: document.getElementById("signup-trade-name").value.trim(),
+      nibEmployerRegistrationNumber,
       phone: document.getElementById("signup-phone").value.trim(),
+      address: {
+        line1: addressLine1,
+        line2: document.getElementById("signup-address-line2").value.trim(),
+        city,
+        country: document.getElementById("signup-country").value.trim(),
+      },
       contactName: document.getElementById("signup-contact").value.trim(),
+      declarant: {
+        name: document.getElementById("signup-declarant-name").value.trim(),
+        position: document.getElementById("signup-declarant-position").value.trim(),
+      },
     });
     await hydrateAfterWrite("Company request submitted.");
   } catch (error) {

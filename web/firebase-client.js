@@ -117,10 +117,22 @@ export async function loadMemberships(uid) {
 export async function requestCompanySignup(user, company) {
   return addDoc(collection(db, "signupRequests"), {
     companyName: company.companyName,
-    registrationNumber: company.registrationNumber || "",
+    tradeName: company.tradeName || company.companyName,
+    nibEmployerRegistrationNumber: company.nibEmployerRegistrationNumber || "",
+    address: {
+      line1: company.address?.line1 || "",
+      line2: company.address?.line2 || "",
+      city: company.address?.city || "",
+      country: company.address?.country || "Trinidad and Tobago",
+    },
     contactName: company.contactName || user.displayName || "",
     contactEmail: user.email || "",
     phone: company.phone || "",
+    declarant: {
+      name: company.declarant?.name || "",
+      position: company.declarant?.position || "",
+      signatureRequiredAfterGeneration: true,
+    },
     status: "pending",
     requestedByUid: user.uid,
     requestedByEmail: user.email || "",
@@ -154,10 +166,23 @@ export async function approveSignupRequest(request) {
   const companyRef = doc(collection(db, "companies"));
   const company = {
     name: request.companyName,
-    registrationNumber: request.registrationNumber || "",
+    legalName: request.companyName,
+    tradeName: request.tradeName || request.companyName,
+    nibEmployerRegistrationNumber: request.nibEmployerRegistrationNumber || "",
+    address: request.address || {
+      line1: "",
+      line2: "",
+      city: "",
+      country: "Trinidad and Tobago",
+    },
     contactName: request.contactName || "",
     contactEmail: request.contactEmail || "",
     phone: request.phone || "",
+    declarant: request.declarant || {
+      name: "",
+      position: "",
+      signatureRequiredAfterGeneration: true,
+    },
     status: "active",
     createdFromSignupRequestId: request.id,
     createdAt: serverTimestamp(),
