@@ -424,7 +424,6 @@ function dashboard() {
   `).join("") || `<p>No pending employee record reminders.</p>`;
 
   return `
-    ${phaseBanner()}
     <div class="grid kpis">
       ${metric("Active employees", activeEmployees)}
       ${metric("Latest net pay", money(latest.net))}
@@ -456,21 +455,6 @@ function dashboard() {
         ${runList(state.runs.slice(0, 4))}
       </section>
     </div>
-  `;
-}
-
-function phaseBanner() {
-  const setup = userProfile?.firebaseSetupIssue
-    ? " Firestore permissions still need setup before company signup requests can be saved."
-    : "";
-  const backend = backendUnavailable
-    ? " The hosted site is online for authentication and company onboarding; payroll generation still requires the local Python engine until the backend is moved to serverless hosting."
-    : "";
-  return `
-    <section class="notice">
-      <strong>Multi-company foundation active.</strong>
-      Google sign-in, company requests, memberships, and admin approvals use Firebase. Payroll generation still runs through the local Python engine in this phase.${setup}${backend}
-    </section>
   `;
 }
 
