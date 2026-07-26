@@ -58,6 +58,11 @@ export function signOutUser() {
   return signOut(auth);
 }
 
+export async function getAuthToken() {
+  if (!auth.currentUser) throw new Error("Sign in before running payroll.");
+  return auth.currentUser.getIdToken();
+}
+
 export async function ensureUserProfile(user) {
   try {
     const userRef = doc(db, "users", user.uid);
@@ -235,5 +240,10 @@ export async function saveCompanyProfile(companyId, company) {
 
 export async function loadCompanyEmployees(companyId) {
   const snapshot = await getDocs(collection(db, "companies", companyId, "employees"));
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+export async function loadCompanyPayrollRuns(companyId) {
+  const snapshot = await getDocs(collection(db, "companies", companyId, "payrollRuns"));
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
 }

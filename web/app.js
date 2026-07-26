@@ -1,9 +1,11 @@
 import {
   approveSignupRequest,
   ensureUserProfile,
+  getAuthToken,
   listenForAuth,
   loadAdminSignupRequests,
   loadCompanyEmployees,
+  loadCompanyPayrollRuns,
   loadMemberships,
   loadMySignupRequests,
   rejectSignupRequest,
@@ -171,6 +173,23 @@ function money(value) {
   return `TTD ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function normalizeRun(run) {
+  return {
+    id: run.id || run.month,
+    month: run.month || run.id || "",
+    has_payroll: run.has_payroll ?? run.hasPayroll ?? true,
+    has_nis: run.has_nis ?? run.hasNis ?? true,
+    has_ni184: run.has_ni184 ?? run.hasNi184 ?? false,
+    has_ni187: run.has_ni187 ?? run.hasNi187 ?? false,
+    employees: Number(run.employees ?? run.employeeCount ?? 0),
+    gross: Number(run.gross ?? run.grossPay ?? 0),
+    deductions: Number(run.deductions ?? run.totalDeductions ?? 0),
+    net: Number(run.net ?? run.netPay ?? 0),
+    payslips: Array.isArray(run.payslips) ? run.payslips : [],
+    status: run.status || "draft",
+  };
+}
+
 function latestMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -229,10 +248,16 @@ async function loadWorkspaceState() {
   await loadLocalState();
   if (localWorkspace || !selectedCompanyId) return;
   try {
-    const employees = await loadCompanyEmployees(selectedCompanyId);
+    const [employees, payrollRuns] = await Promise.all([
+      loadCompanyEmployees(selectedCompanyId),
+      loadCompanyPayrollRuns(selectedCompanyId),
+    ]);
+    const runs = payrollRuns.map(normalizeRun).sort((a, b) => String(b.month).localeCompare(String(a.month)));
     state = {
       ...state,
       employees: employees.sort((a, b) => String(a.employee_id || "").localeCompare(String(b.employee_id || ""))),
+      runs,
+      latest_run: runs[0] || state.latest_run,
     };
   } catch {
     // Company Firestore data may be unavailable until rules/memberships are fully set up.
@@ -457,7 +482,8 @@ function shell(content) {
 
 function topbarActions() {
   if (activeView === "admin" || activeView === "companies") return "";
-  if (backendUnavailable) {
+  const canRunHostedPayroll = !localWorkspace && selectedCompanyId;
+  if (backendUnavailable && !canRunHostedPayroll) {
     return `
       <div class="actions">
         <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}" disabled>
@@ -518,9 +544,10 @@ function dashboard() {
   state ||= emptyLocalState();
   const activeEmployees = state.employees.filter((employee) => employee.active).length;
   const latest = state.latest_run || {};
-  const scheduleStatus = backendUnavailable ? "Offline" : state.settings.schedule_enabled ? "Enabled" : "Paused";
-  const scheduleTitle = backendUnavailable ? "Payroll engine status" : "Next scheduled run";
-  const scheduleNote = backendUnavailable
+  const canRunHostedPayroll = !localWorkspace && selectedCompanyId;
+  const scheduleStatus = backendUnavailable && !canRunHostedPayroll ? "Offline" : state.settings.schedule_enabled ? "Enabled" : "Paused";
+  const scheduleTitle = backendUnavailable && !canRunHostedPayroll ? "Payroll engine status" : "Next scheduled run";
+  const scheduleNote = backendUnavailable && !canRunHostedPayroll
     ? "Hosted payroll generation is not connected yet. Employee records are online, but payroll runs must still be generated from the local payroll engine until the hosted backend is added."
     : state.settings.last_note;
   const alerts = state.alerts.map((alert) => `
@@ -1012,13 +1039,31 @@ window.runPayroll = async function runPayroll() {
   if (!month) return toast("Choose a payroll month.");
   try {
     toast(`Running payroll for ${month}${generateNisForms ? " with NIS forms" : ""}...`);
-    const payload = await api("/api/run-payroll", {
-      method: "POST",
-      body: JSON.stringify({ month, generate_nis_forms: generateNisForms }),
-    });
-    state = payload.state;
+    let payload;
+    if (!localWorkspace && selectedCompanyId) {
+      const token = await getAuthToken();
+      payload = await api("/api/run-payroll", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          month,
+          companyId: selectedCompanyId,
+          generate_nis_forms: generateNisForms,
+        }),
+      });
+      await loadWorkspaceState();
+    } else {
+      payload = await api("/api/run-payroll", {
+        method: "POST",
+        body: JSON.stringify({ month, generate_nis_forms: generateNisForms }),
+      });
+      state = payload.state;
+    }
     activeView = "runs";
-    toast(`Payroll completed for ${month}.`);
+    toast(payload.status === "draft" ? `Draft payroll created for ${month}.` : `Payroll completed for ${month}.`);
     render();
   } catch (error) {
     toast(error.message);
