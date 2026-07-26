@@ -9,6 +9,7 @@ import {
   rejectSignupRequest,
   requestCompanySignup,
   saveCompanyEmployee,
+  saveCompanyProfile,
   signInWithGoogle,
   signOutUser,
 } from "./firebase-client.js";
@@ -60,6 +61,81 @@ const defaultEmployee = {
   active: true,
 };
 
+const localCompanyImport = {
+  company: {
+    legalName: "The J Spa and Skin Clinic LTD",
+    name: "The J Spa and Skin Clinic LTD",
+    tradeName: "The J Spa and Skin Clinic LTD",
+    nibEmployerRegistrationNumber: "155218",
+    registrationNumber: "155218",
+    phone: "221-0695",
+    address: {
+      line1: "25 A Circular Road",
+      line2: "",
+      city: "San Fernando",
+      country: "Trinidad and Tobago",
+    },
+    declarant: {
+      name: "Jhoneile Diaz-Cummings",
+      position: "Spa Manager",
+      signatureRequiredAfterGeneration: true,
+    },
+  },
+  employees: [
+    {
+      employee_id: "EMP001",
+      surname: "Diaz-Cummings",
+      first_name: "Jhoneile",
+      nis_number: "07 152 8487",
+      date_of_birth: "1990-01-17",
+      date_employed: "2020-09-01",
+      last_work_date_rule: "Use the last date of the month for which NIS is being calculated.",
+      monthly_salary: 6000,
+      bir_number: "",
+      pay_frequency: "",
+      tax_residency: "",
+      td1_annual_allowances: "",
+      approved_pension_or_annuity: "",
+      health_surcharge_exempt: "",
+      active: true,
+    },
+    {
+      employee_id: "EMP002",
+      surname: "Hosein",
+      first_name: "Marie",
+      nis_number: "05 160 6676",
+      date_of_birth: "1993-11-02",
+      date_employed: "2023-01-09",
+      last_work_date_rule: "Use the last date of the month for which NIS is being calculated.",
+      monthly_salary: 5000,
+      bir_number: "",
+      pay_frequency: "",
+      tax_residency: "",
+      td1_annual_allowances: "",
+      approved_pension_or_annuity: "",
+      health_surcharge_exempt: "",
+      active: true,
+    },
+    {
+      employee_id: "EMP003",
+      surname: "Hernandez",
+      first_name: "Daniella",
+      nis_number: "01 140 0338",
+      date_of_birth: "1979-06-05",
+      date_employed: "2025-01-10",
+      last_work_date_rule: "Use the last date of the month for which NIS is being calculated.",
+      monthly_salary: 5000,
+      bir_number: "",
+      pay_frequency: "",
+      tax_residency: "",
+      td1_annual_allowances: "",
+      approved_pension_or_annuity: "",
+      health_surcharge_exempt: "",
+      active: true,
+    },
+  ],
+};
+
 let authUser = null;
 let userProfile = null;
 let memberships = [];
@@ -109,6 +185,10 @@ function isAdmin() {
 
 function selectedMembership() {
   return memberships.find((membership) => membership.id === selectedCompanyId) || null;
+}
+
+function selectedCompanyProfile() {
+  return selectedMembership()?.company || null;
 }
 
 function currentCompanyName() {
@@ -629,7 +709,23 @@ function reportsView() {
 
 function settingsView() {
   state ||= emptyLocalState();
+  const company = selectedCompanyProfile();
+  const address = company?.address || {};
+  const declarant = company?.declarant || {};
   return `
+    ${company ? `
+      <section class="panel">
+        <div class="panel-head"><h2>Company profile</h2><span class="status success">Active</span></div>
+        <div class="detail-grid">
+          <div><span>Legal name</span><strong>${escapeHtml(company.legalName || company.name || "")}</strong></div>
+          <div><span>Trade name on NIB forms</span><strong>${escapeHtml(company.tradeName || company.name || "")}</strong></div>
+          <div><span>NIB employer registration number</span><strong>${escapeHtml(company.nibEmployerRegistrationNumber || company.registrationNumber || "")}</strong></div>
+          <div><span>Phone</span><strong>${escapeHtml(company.phone || "")}</strong></div>
+          <div><span>Employer address</span><strong>${escapeHtml([address.line1, address.line2, address.city, address.country].filter(Boolean).join(", "))}</strong></div>
+          <div><span>NIB declarant</span><strong>${escapeHtml([declarant.name, declarant.position].filter(Boolean).join(", "))}</strong></div>
+        </div>
+      </section>
+    ` : ""}
     <section class="panel">
       <div class="panel-head"><h2>Schedule and reminders</h2><button class="btn primary" onclick="saveSettings()" ${backendUnavailable ? "disabled" : ""}>Save settings</button></div>
       <div class="form-grid">
@@ -667,6 +763,8 @@ function adminView() {
               ${request.status === "pending" ? `
                 <button class="btn primary" onclick="approveSignup('${request.id}')">Approve</button>
                 <button class="btn" onclick="rejectSignup('${request.id}')">Reject</button>
+              ` : request.companyId && /j spa/i.test(`${request.companyName || ""} ${request.tradeName || ""}`) ? `
+                <button class="btn" onclick="importLocalCompanyData('${request.id}')">Import local data</button>
               ` : ""}
             </td>
           </tr>
@@ -919,6 +1017,25 @@ window.approveSignup = async function approveSignup(requestId) {
 window.rejectSignup = async function rejectSignup(requestId) {
   await rejectSignupRequest(requestId);
   await hydrateAfterWrite("Company request rejected.");
+};
+
+window.importLocalCompanyData = async function importLocalCompanyData(requestId) {
+  const request = adminSignupRequests.find((item) => item.id === requestId);
+  if (!request?.companyId) return toast("Approved company workspace not found.");
+  try {
+    await saveCompanyProfile(request.companyId, {
+      ...localCompanyImport.company,
+      status: "active",
+      source: "local-project-migration",
+    });
+    await Promise.all(localCompanyImport.employees.map((employee) => saveCompanyEmployee(request.companyId, {
+      ...employee,
+      source: "local-project-migration",
+    })));
+    await hydrateAfterWrite("Local company data imported.");
+  } catch (error) {
+    toast(error.message);
+  }
 };
 
 bootstrap();

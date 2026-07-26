@@ -226,6 +226,13 @@ export async function saveCompanyEmployee(companyId, employee) {
   }, { merge: true });
 }
 
+export async function saveCompanyProfile(companyId, company) {
+  await setDoc(doc(db, "companies", companyId), {
+    ...company,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
 export async function loadCompanyEmployees(companyId) {
   const snapshot = await getDocs(collection(db, "companies", companyId, "employees"));
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
