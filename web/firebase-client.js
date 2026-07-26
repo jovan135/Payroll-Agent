@@ -2,8 +2,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import {
   getAuth,
   GoogleAuthProvider,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
@@ -50,8 +52,16 @@ export async function signInWithGoogle(options = {}) {
   if (options.promptSelectAccount) {
     provider.setCustomParameters({ prompt: "select_account" });
   }
+  if (options.redirect) {
+    await signInWithRedirect(auth, provider);
+    return null;
+  }
   const result = await signInWithPopup(auth, provider);
   return result.user;
+}
+
+export async function completeRedirectSignIn() {
+  return getRedirectResult(auth);
 }
 
 export function signOutUser() {

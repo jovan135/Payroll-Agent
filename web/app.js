@@ -1,5 +1,6 @@
 import {
   approveSignupRequest,
+  completeRedirectSignIn,
   ensureUserProfile,
   getAuthToken,
   listenForAuth,
@@ -152,6 +153,15 @@ let activeView = "dashboard";
 let editing = null;
 let loadingMessage = "Connecting to Payroll Agent...";
 let backendUnavailable = false;
+
+function friendlyAuthMessage(error) {
+  if (error.code === "auth/unauthorized-domain") {
+    return "Firebase has not authorized this domain. Add this exact domain in Firebase Authentication > Settings > Authorized domains.";
+  }
+  if (error.code === "auth/popup-closed-by-user") return "Google sign-in was closed before it completed.";
+  if (error.code === "auth/popup-blocked") return "The browser blocked the Google sign-in popup.";
+  return error.message || "Google sign-in could not be completed.";
+}
 
 function emptyLocalState() {
   return {
@@ -316,6 +326,9 @@ async function refreshFirebaseState() {
 
 async function bootstrap() {
   renderLoading();
+  completeRedirectSignIn().catch((error) => {
+    renderError(new Error(friendlyAuthMessage(error)));
+  });
   listenForAuth(async (user) => {
     authUser = user;
     let fallbackRendered = false;
@@ -927,12 +940,12 @@ window.signIn = async function signIn(intent = "login") {
       window.location.href = window.location.href.replace("127.0.0.1", "localhost");
       return;
     }
-    await signInWithGoogle({ promptSelectAccount: intent === "signup" });
+    loadingMessage = "Opening Google sign-in...";
+    renderLoading();
+    await signInWithGoogle({ promptSelectAccount: intent === "signup", redirect: true });
   } catch (error) {
-    const message = error.code === "auth/unauthorized-domain"
-      ? "Firebase has not authorized this domain. Add localhost and 127.0.0.1 in Firebase Authentication > Settings > Authorized domains."
-      : error.message;
-    toast(message);
+    render();
+    toast(friendlyAuthMessage(error));
   }
 };
 
