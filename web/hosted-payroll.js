@@ -62,6 +62,7 @@ async function runHostedPayroll() {
 function patchHostedControls() {
   const companyId = selectedCompanyId();
   if (!companyId) return;
+  if (!document.querySelector(".main")) return;
 
   const button = document.querySelector(".disabled-action")
     || Array.from(document.querySelectorAll("button")).find((item) => item.textContent.trim() === "Run payroll");

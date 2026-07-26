@@ -224,6 +224,13 @@ function toast(message) {
   setTimeout(() => node.remove(), 3500);
 }
 
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -249,8 +256,8 @@ async function loadWorkspaceState() {
   if (localWorkspace || !selectedCompanyId) return;
   try {
     const [employees, payrollRuns] = await Promise.all([
-      loadCompanyEmployees(selectedCompanyId),
-      loadCompanyPayrollRuns(selectedCompanyId),
+      withTimeout(loadCompanyEmployees(selectedCompanyId), 8000, []),
+      withTimeout(loadCompanyPayrollRuns(selectedCompanyId), 8000, []),
     ]);
     const runs = payrollRuns.map(normalizeRun).sort((a, b) => String(b.month).localeCompare(String(a.month)));
     state = {
@@ -266,11 +273,18 @@ async function loadWorkspaceState() {
 
 async function refreshFirebaseState() {
   if (!authUser) return;
-  userProfile = await ensureUserProfile(authUser);
-  memberships = await loadMemberships(authUser.uid);
-  mySignupRequests = await loadMySignupRequests(authUser.uid);
+  userProfile = await withTimeout(ensureUserProfile(authUser), 8000, {
+    uid: authUser.uid,
+    email: authUser.email || "",
+    displayName: authUser.displayName || "",
+    platformRole: "user",
+    firebaseSetupIssue: true,
+    firebaseSetupMessage: "Firebase workspace reads are taking longer than expected. Reload the page, or check the Firebase connection.",
+  });
+  memberships = await withTimeout(loadMemberships(authUser.uid), 8000, []);
+  mySignupRequests = await withTimeout(loadMySignupRequests(authUser.uid), 8000, []);
   if (isAdmin()) {
-    adminSignupRequests = await loadAdminSignupRequests();
+    adminSignupRequests = await withTimeout(loadAdminSignupRequests(), 8000, []);
   } else {
     adminSignupRequests = [];
   }
