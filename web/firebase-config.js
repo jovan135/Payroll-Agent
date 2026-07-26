@@ -1,6 +1,10 @@
+const defaultAuthDomain = "payroll-application-f6d25.firebaseapp.com";
+const hostedAuthDomain = "payroll-agent-git-main-jovancummings-6979s-projects.vercel.app";
+const hostname = window.location.hostname;
+
 export const firebaseConfig = {
   apiKey: "AIzaSyBylmaNc1dq6Cx9UK6zj-N7AF6dXxIIvhk",
-  authDomain: "payroll-application-f6d25.firebaseapp.com",
+  authDomain: hostname === "localhost" || hostname === "127.0.0.1" ? defaultAuthDomain : hostedAuthDomain,
   projectId: "payroll-application-f6d25",
   storageBucket: "payroll-application-f6d25.firebasestorage.app",
   messagingSenderId: "1049795386505",
