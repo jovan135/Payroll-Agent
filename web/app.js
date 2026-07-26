@@ -144,6 +144,20 @@ async function loadLocalState() {
   }
 }
 
+async function loadWorkspaceState() {
+  await loadLocalState();
+  if (localWorkspace || !selectedCompanyId) return;
+  try {
+    const employees = await loadCompanyEmployees(selectedCompanyId);
+    state = {
+      ...state,
+      employees: employees.sort((a, b) => String(a.employee_id || "").localeCompare(String(b.employee_id || ""))),
+    };
+  } catch {
+    // Company Firestore data may be unavailable until rules/memberships are fully set up.
+  }
+}
+
 async function refreshFirebaseState() {
   if (!authUser) return;
   userProfile = await ensureUserProfile(authUser);
@@ -177,7 +191,7 @@ async function bootstrap() {
         if (authIntent === "signup") {
           state = emptyLocalState();
         } else if (localWorkspace || selectedCompanyId || isAdmin()) {
-          await loadLocalState();
+          await loadWorkspaceState();
         } else {
           state = emptyLocalState();
         }
@@ -721,7 +735,7 @@ function render() {
 
 async function hydrateAfterWrite(message) {
   await refreshFirebaseState();
-  await loadLocalState();
+  await loadWorkspaceState();
   toast(message);
   render();
 }
@@ -800,7 +814,7 @@ window.openLocalWorkspace = async function openLocalWorkspace() {
   localStorage.setItem("localWorkspace", "true");
   localStorage.removeItem("selectedCompanyId");
   localStorage.setItem("authIntent", authIntent);
-  await loadLocalState();
+  await loadWorkspaceState();
   render();
 };
 
@@ -815,12 +829,7 @@ window.selectCompany = async function selectCompany(companyId) {
   localStorage.setItem("selectedCompanyId", companyId);
   localStorage.removeItem("localWorkspace");
   localStorage.setItem("authIntent", authIntent);
-  await loadLocalState();
-  try {
-    await loadCompanyEmployees(companyId);
-  } catch {
-    // Firestore employee mirroring is optional until rules are deployed.
-  }
+  await loadWorkspaceState();
   activeView = "dashboard";
   render();
 };
