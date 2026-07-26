@@ -326,9 +326,12 @@ async function refreshFirebaseState() {
 
 async function bootstrap() {
   renderLoading();
-  completeRedirectSignIn().catch((error) => {
+  try {
+    await completeRedirectSignIn();
+  } catch (error) {
     renderError(new Error(friendlyAuthMessage(error)));
-  });
+    return;
+  }
   listenForAuth(async (user) => {
     authUser = user;
     let fallbackRendered = false;
@@ -941,8 +944,7 @@ window.signIn = async function signIn(intent = "login") {
       return;
     }
     loadingMessage = "Opening Google sign-in...";
-    renderLoading();
-    await signInWithGoogle({ promptSelectAccount: intent === "signup", redirect: true });
+    await signInWithGoogle({ promptSelectAccount: intent === "signup", fallbackToRedirect: true });
   } catch (error) {
     render();
     toast(friendlyAuthMessage(error));

@@ -56,8 +56,19 @@ export async function signInWithGoogle(options = {}) {
     await signInWithRedirect(auth, provider);
     return null;
   }
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (error) {
+    const canRetryWithRedirect = options.fallbackToRedirect && [
+      "auth/popup-blocked",
+      "auth/cancelled-popup-request",
+      "auth/operation-not-supported-in-this-environment",
+    ].includes(error.code);
+    if (!canRetryWithRedirect) throw error;
+    await signInWithRedirect(auth, provider);
+    return null;
+  }
 }
 
 export async function completeRedirectSignIn() {
