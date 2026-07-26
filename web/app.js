@@ -264,7 +264,7 @@ function renderOnboarding() {
           <div class="form-grid">
             <label>Legal company name<input id="signup-company-name" type="text" placeholder="Company LTD"></label>
             <label>Trade name used on NIB forms<input id="signup-trade-name" type="text" placeholder="Company trading name"></label>
-            <label>NIB employer registration number<input id="signup-nib-registration" type="text" placeholder="Employer registration number"></label>
+            <label>NIB employer registration number<input id="signup-nib-registration" type="text" inputmode="numeric" maxlength="6" pattern="\\d{6}" placeholder="6 digits"></label>
             <label>Phone<input id="signup-phone" type="text"></label>
           </div>
           <p class="caption">The NIB employer registration number is the employer number issued by the National Insurance Board. It is not the same thing as a Companies Registry incorporation number unless NIB assigned the same value.</p>
@@ -780,6 +780,7 @@ window.submitCompanySignup = async function submitCompanySignup() {
   const city = document.getElementById("signup-city").value.trim();
   if (!companyName) return toast("Company name is required.");
   if (!nibEmployerRegistrationNumber) return toast("NIB employer registration number is required for NIB forms.");
+  if (!/^\d{6}$/.test(nibEmployerRegistrationNumber)) return toast("NIB employer registration number must be exactly 6 digits.");
   if (!addressLine1 || !city) return toast("Address line 1 and city are required for NIB forms.");
   try {
     await requestCompanySignup(authUser, {
