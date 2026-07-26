@@ -232,10 +232,25 @@ function withTimeout(promise, ms, fallback) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 8000);
+  let response;
+  try {
+    response = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error(`Request timed out: ${path}`);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(`Expected JSON from ${path}`);
+  }
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "Request failed");
   return payload;
@@ -303,6 +318,14 @@ async function bootstrap() {
   renderLoading();
   listenForAuth(async (user) => {
     authUser = user;
+    let fallbackRendered = false;
+    const fallbackTimer = setTimeout(() => {
+      if (fallbackRendered) return;
+      fallbackRendered = true;
+      state ||= emptyLocalState();
+      render();
+      toast("Workspace data is taking longer than expected. Showing the app with available data.");
+    }, 12000);
     try {
       if (authUser) {
         loadingMessage = "Loading company workspace...";
@@ -316,9 +339,11 @@ async function bootstrap() {
           state = emptyLocalState();
         }
       }
-      render();
+      if (!fallbackRendered) render();
     } catch (error) {
-      renderError(error);
+      if (!fallbackRendered) renderError(error);
+    } finally {
+      clearTimeout(fallbackTimer);
     }
   });
 }
