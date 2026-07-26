@@ -5,7 +5,6 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
-  signInWithRedirect,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
@@ -52,23 +51,8 @@ export async function signInWithGoogle(options = {}) {
   if (options.promptSelectAccount) {
     provider.setCustomParameters({ prompt: "select_account" });
   }
-  if (options.redirect) {
-    await signInWithRedirect(auth, provider);
-    return null;
-  }
-  try {
-    const result = await signInWithPopup(auth, provider);
-    return result.user;
-  } catch (error) {
-    const canRetryWithRedirect = options.fallbackToRedirect && [
-      "auth/popup-blocked",
-      "auth/cancelled-popup-request",
-      "auth/operation-not-supported-in-this-environment",
-    ].includes(error.code);
-    if (!canRetryWithRedirect) throw error;
-    await signInWithRedirect(auth, provider);
-    return null;
-  }
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
 }
 
 export async function completeRedirectSignIn() {

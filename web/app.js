@@ -160,6 +160,8 @@ function friendlyAuthMessage(error) {
   }
   if (error.code === "auth/popup-closed-by-user") return "Google sign-in was closed before it completed.";
   if (error.code === "auth/popup-blocked") return "The browser blocked the Google sign-in popup.";
+  if (error.code === "auth/cancelled-popup-request") return "Google sign-in was interrupted. Try again and keep the Google sign-in window open until it finishes.";
+  if (error.code === "auth/operation-not-supported-in-this-environment") return "This browser does not support Google popup sign-in. Try opening the app in Chrome.";
   return error.message || "Google sign-in could not be completed.";
 }
 
@@ -944,7 +946,7 @@ window.signIn = async function signIn(intent = "login") {
       return;
     }
     loadingMessage = "Opening Google sign-in...";
-    await signInWithGoogle({ promptSelectAccount: intent === "signup", fallbackToRedirect: true });
+    await signInWithGoogle({ promptSelectAccount: intent === "signup" });
   } catch (error) {
     render();
     toast(friendlyAuthMessage(error));
