@@ -764,6 +764,7 @@ function adminView() {
                 <button class="btn primary" onclick="approveSignup('${request.id}')">Approve</button>
                 <button class="btn" onclick="rejectSignup('${request.id}')">Reject</button>
               ` : request.companyId && /j spa/i.test(`${request.companyName || ""} ${request.tradeName || ""}`) ? `
+                <button class="btn primary" onclick="openAdminCompany('${request.id}')">Open workspace</button>
                 <button class="btn" onclick="importLocalCompanyData('${request.id}')">Import local data</button>
               ` : ""}
             </td>
@@ -1036,6 +1037,20 @@ window.importLocalCompanyData = async function importLocalCompanyData(requestId)
   } catch (error) {
     toast(error.message);
   }
+};
+
+window.openAdminCompany = async function openAdminCompany(requestId) {
+  const request = adminSignupRequests.find((item) => item.id === requestId);
+  if (!request?.companyId) return toast("Approved company workspace not found.");
+  localWorkspace = false;
+  selectedCompanyId = request.companyId;
+  authIntent = "login";
+  localStorage.setItem("selectedCompanyId", selectedCompanyId);
+  localStorage.removeItem("localWorkspace");
+  localStorage.setItem("authIntent", authIntent);
+  await loadWorkspaceState();
+  activeView = "dashboard";
+  render();
 };
 
 bootstrap();
