@@ -141,6 +141,7 @@ let userProfile = null;
 let memberships = [];
 let mySignupRequests = [];
 let adminSignupRequests = [];
+let selectedAdminCompany = null;
 let selectedCompanyId = localStorage.getItem("selectedCompanyId") || "";
 let localWorkspace = localStorage.getItem("localWorkspace") === "true";
 let authIntent = localStorage.getItem("authIntent") || "login";
@@ -188,12 +189,12 @@ function selectedMembership() {
 }
 
 function selectedCompanyProfile() {
-  return selectedMembership()?.company || null;
+  return selectedMembership()?.company || (selectedAdminCompany?.id === selectedCompanyId ? selectedAdminCompany : null);
 }
 
 function currentCompanyName() {
   if (localWorkspace) return "The J Spa and Skin Clinic LTD";
-  return selectedMembership()?.company?.name || selectedMembership()?.companyName || "No company selected";
+  return selectedMembership()?.company?.name || selectedMembership()?.companyName || selectedCompanyProfile()?.name || "No company selected";
 }
 
 function toast(message) {
@@ -863,6 +864,7 @@ window.signOut = async function signOut() {
   memberships = [];
   localWorkspace = false;
   selectedCompanyId = "";
+  selectedAdminCompany = null;
   authIntent = "login";
   localStorage.removeItem("localWorkspace");
   localStorage.removeItem("selectedCompanyId");
@@ -909,6 +911,7 @@ window.submitCompanySignup = async function submitCompanySignup() {
 window.openLocalWorkspace = async function openLocalWorkspace() {
   localWorkspace = true;
   selectedCompanyId = "";
+  selectedAdminCompany = null;
   authIntent = "login";
   localStorage.setItem("localWorkspace", "true");
   localStorage.removeItem("selectedCompanyId");
@@ -924,6 +927,7 @@ window.selectCompany = async function selectCompany(companyId) {
   }
   localWorkspace = false;
   selectedCompanyId = companyId;
+  selectedAdminCompany = null;
   authIntent = "login";
   localStorage.setItem("selectedCompanyId", companyId);
   localStorage.removeItem("localWorkspace");
@@ -1044,6 +1048,10 @@ window.openAdminCompany = async function openAdminCompany(requestId) {
   if (!request?.companyId) return toast("Approved company workspace not found.");
   localWorkspace = false;
   selectedCompanyId = request.companyId;
+  selectedAdminCompany = {
+    id: request.companyId,
+    ...localCompanyImport.company,
+  };
   authIntent = "login";
   localStorage.setItem("selectedCompanyId", selectedCompanyId);
   localStorage.removeItem("localWorkspace");
