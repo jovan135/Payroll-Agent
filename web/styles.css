@@ -184,6 +184,11 @@ button {
   min-height: auto;
 }
 
+.muted-control {
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
 .btn {
   min-height: 38px;
   border-radius: 8px;
@@ -202,6 +207,12 @@ button {
 
 .btn.primary:hover {
   background: var(--accent-dark);
+}
+
+.disabled-action,
+.disabled-action:hover {
+  background: #8ea0ad;
+  cursor: help;
 }
 
 .grid {

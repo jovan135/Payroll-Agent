@@ -457,12 +457,20 @@ function shell(content) {
 
 function topbarActions() {
   if (activeView === "admin" || activeView === "companies") return "";
-  const disabled = backendUnavailable ? "disabled" : "";
+  if (backendUnavailable) {
+    return `
+      <div class="actions">
+        <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}" disabled>
+        <label class="inline-check muted-control"><input id="generateNisForms" type="checkbox" checked disabled> NIS forms</label>
+        <button class="btn primary disabled-action" onclick="explainPayrollUnavailable()">Payroll engine offline</button>
+      </div>
+    `;
+  }
   return `
     <div class="actions">
-      <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}" ${disabled}>
-      <label class="inline-check"><input id="generateNisForms" type="checkbox" checked ${disabled}> NIS forms</label>
-      <button class="btn primary" onclick="runPayroll()" ${disabled}>Run payroll</button>
+      <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}">
+      <label class="inline-check"><input id="generateNisForms" type="checkbox" checked> NIS forms</label>
+      <button class="btn primary" onclick="runPayroll()">Run payroll</button>
     </div>
   `;
 }
@@ -510,6 +518,11 @@ function dashboard() {
   state ||= emptyLocalState();
   const activeEmployees = state.employees.filter((employee) => employee.active).length;
   const latest = state.latest_run || {};
+  const scheduleStatus = backendUnavailable ? "Offline" : state.settings.schedule_enabled ? "Enabled" : "Paused";
+  const scheduleTitle = backendUnavailable ? "Payroll engine status" : "Next scheduled run";
+  const scheduleNote = backendUnavailable
+    ? "Hosted payroll generation is not connected yet. Employee records are online, but payroll runs must still be generated from the local payroll engine until the hosted backend is added."
+    : state.settings.last_note;
   const alerts = state.alerts.map((alert) => `
     <div>
       <strong>${escapeHtml(alert.title)}</strong>
@@ -531,8 +544,8 @@ function dashboard() {
         ${alerts}
       </section>
       <section class="panel">
-        <div class="panel-head"><h2>Next scheduled run</h2><span class="status neutral">${state.settings.schedule_enabled ? "Enabled" : "Paused"}</span></div>
-        <p>${escapeHtml(state.settings.last_note)}</p>
+        <div class="panel-head"><h2>${scheduleTitle}</h2><span class="status ${backendUnavailable ? "warning" : "neutral"}">${scheduleStatus}</span></div>
+        <p>${escapeHtml(scheduleNote)}</p>
         <div class="activity">
           <div><span>Run day</span><strong>${state.settings.scheduled_day}</strong></div>
           <div><span>Run time</span><strong>${state.settings.scheduled_time}</strong></div>
@@ -1010,6 +1023,10 @@ window.runPayroll = async function runPayroll() {
   } catch (error) {
     toast(error.message);
   }
+};
+
+window.explainPayrollUnavailable = function explainPayrollUnavailable() {
+  toast("Hosted payroll running is not connected yet. Use the local payroll engine for now.");
 };
 
 window.approveSignup = async function approveSignup(requestId) {
