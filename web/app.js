@@ -1040,7 +1040,7 @@ window.signIn = async function signIn(intent = "login") {
     }
     loadingMessage = "Opening Google sign-in...";
     renderLoading();
-    await signInWithGoogle({ promptSelectAccount: intent === "signup", redirect: true });
+    await signInWithGoogle({ promptSelectAccount: true, redirect: true });
   } catch (error) {
     render();
     toast(friendlyAuthMessage(error));
