@@ -377,15 +377,31 @@ async function refreshFirebaseState() {
 
 async function bootstrap() {
   renderLoading();
-  const redirectResult = await settleWithTimeout(completeRedirectSignIn(), 8000);
-  if (redirectResult.status === "rejected") {
-    renderError(new Error(friendlyAuthMessage(redirectResult.error)));
-    return;
-  }
-  if (redirectResult.status === "timeout") {
-    toast("Google sign-in is taking longer than expected. Continuing with the current session.");
-  }
+  let authSettled = false;
+  let redirectSettled = false;
+  settleWithTimeout(completeRedirectSignIn(), 8000).then((redirectResult) => {
+    redirectSettled = true;
+    if (redirectResult.status === "rejected") {
+      toast(friendlyAuthMessage(redirectResult.error));
+    } else if (redirectResult.status === "timeout") {
+      toast("Google sign-in is taking longer than expected. Continuing with the current session.");
+    }
+  });
+  const authStartupTimer = setTimeout(() => {
+    if (authSettled) return;
+    authSettled = true;
+    state ||= emptyLocalState();
+    render();
+    if (!redirectSettled) {
+      toast("Firebase sign-in is taking longer than expected. Showing the login page.");
+    }
+  }, 9000);
   listenForAuth(async (user) => {
+    if (authSettled && !authUser) {
+      clearTimeout(authStartupTimer);
+    }
+    authSettled = true;
+    clearTimeout(authStartupTimer);
     authUser = user;
     let fallbackRendered = false;
     const fallbackTimer = setTimeout(() => {
