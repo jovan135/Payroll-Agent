@@ -1,5 +1,5 @@
 const defaultAuthDomain = "payroll-application-f6d25.firebaseapp.com";
-const hostedAuthDomain = "payroll-agent-git-main-jovancummings-6979s-projects.vercel.app";
+const hostedAuthDomain = "payroll-agent-ten.vercel.app";
 const hostname = window.location.hostname;
 
 export const firebaseConfig = {
