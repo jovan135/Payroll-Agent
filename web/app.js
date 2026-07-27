@@ -219,13 +219,35 @@ function selectedMembership() {
   return memberships.find((membership) => membership.id === selectedCompanyId) || null;
 }
 
+function selectedSignupRequest() {
+  return mySignupRequests.find((request) => request.companyId === selectedCompanyId) || null;
+}
+
 function selectedCompanyProfile() {
-  return selectedMembership()?.company || (selectedAdminCompany?.id === selectedCompanyId ? selectedAdminCompany : null);
+  const request = selectedSignupRequest();
+  return selectedMembership()?.company
+    || (selectedAdminCompany?.id === selectedCompanyId ? selectedAdminCompany : null)
+    || (request ? {
+      id: request.companyId,
+      name: request.companyName,
+      tradeName: request.tradeName,
+      nibEmployerRegistrationNumber: request.nibEmployerRegistrationNumber,
+      address: request.address,
+      contactName: request.contactName,
+      contactEmail: request.contactEmail,
+      phone: request.phone,
+      declarant: request.declarant,
+      status: request.status,
+    } : null);
 }
 
 function currentCompanyName() {
   if (localWorkspace) return "The J Spa and Skin Clinic LTD";
-  return selectedMembership()?.company?.name || selectedMembership()?.companyName || selectedCompanyProfile()?.name || "No company selected";
+  return selectedMembership()?.company?.name
+    || selectedMembership()?.companyName
+    || selectedSignupRequest()?.companyName
+    || selectedCompanyProfile()?.name
+    || "No company selected";
 }
 
 function toast(message) {
@@ -344,6 +366,12 @@ async function refreshFirebaseState() {
   } else if (!selectedCompanyId && memberships.length) {
     selectedCompanyId = memberships[0].id;
     localStorage.setItem("selectedCompanyId", selectedCompanyId);
+  } else if (!selectedCompanyId) {
+    const approvedRequest = mySignupRequests.find((request) => request.status === "approved" && request.companyId);
+    if (approvedRequest) {
+      selectedCompanyId = approvedRequest.companyId;
+      localStorage.setItem("selectedCompanyId", selectedCompanyId);
+    }
   }
 }
 
