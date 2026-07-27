@@ -67,16 +67,21 @@ function patchHostedControls() {
   const button = document.querySelector(".disabled-action")
     || Array.from(document.querySelectorAll("button")).find((item) => item.textContent.trim() === "Run payroll");
   if (button) {
-    button.textContent = "Run payroll";
+    if (button.textContent.trim() !== "Run payroll") {
+      button.textContent = "Run payroll";
+    }
     button.classList.remove("disabled-action");
     button.removeAttribute("disabled");
-    button.onclick = async () => {
-      try {
-        await runHostedPayroll();
-      } catch (error) {
-        toast(error.message);
-      }
-    };
+    if (!button.dataset.hostedPayrollPatched) {
+      button.dataset.hostedPayrollPatched = "true";
+      button.onclick = async () => {
+        try {
+          await runHostedPayroll();
+        } catch (error) {
+          toast(error.message);
+        }
+      };
+    }
   }
 
   document.getElementById("runMonth")?.removeAttribute("disabled");
