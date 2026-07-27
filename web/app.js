@@ -223,10 +223,27 @@ function selectedSignupRequest() {
   return mySignupRequests.find((request) => request.companyId === selectedCompanyId) || null;
 }
 
+function selectedAdminSignupRequest() {
+  return adminSignupRequests.find((request) => request.companyId === selectedCompanyId) || null;
+}
+
 function selectedCompanyProfile() {
   const request = selectedSignupRequest();
+  const adminRequest = selectedAdminSignupRequest();
   return selectedMembership()?.company
     || (selectedAdminCompany?.id === selectedCompanyId ? selectedAdminCompany : null)
+    || (adminRequest ? {
+      id: adminRequest.companyId,
+      name: adminRequest.companyName,
+      tradeName: adminRequest.tradeName,
+      nibEmployerRegistrationNumber: adminRequest.nibEmployerRegistrationNumber,
+      address: adminRequest.address,
+      contactName: adminRequest.contactName,
+      contactEmail: adminRequest.contactEmail,
+      phone: adminRequest.phone,
+      declarant: adminRequest.declarant,
+      status: adminRequest.status,
+    } : null)
     || (request ? {
       id: request.companyId,
       name: request.companyName,
@@ -363,10 +380,19 @@ async function refreshFirebaseState() {
     localWorkspace = false;
     localStorage.removeItem("selectedCompanyId");
     localStorage.removeItem("localWorkspace");
-  } else if (!selectedCompanyId && memberships.length) {
+  } else if (selectedCompanyId && !localWorkspace) {
+    const hasSelectedWorkspace = memberships.some((membership) => membership.id === selectedCompanyId)
+      || mySignupRequests.some((request) => request.status === "approved" && request.companyId === selectedCompanyId)
+      || (isAdmin() && adminSignupRequests.some((request) => request.status === "approved" && request.companyId === selectedCompanyId));
+    if (!hasSelectedWorkspace) {
+      selectedCompanyId = "";
+      localStorage.removeItem("selectedCompanyId");
+    }
+  }
+  if (authIntent !== "signup" && !selectedCompanyId && memberships.length) {
     selectedCompanyId = memberships[0].id;
     localStorage.setItem("selectedCompanyId", selectedCompanyId);
-  } else if (!selectedCompanyId) {
+  } else if (authIntent !== "signup" && !selectedCompanyId) {
     const approvedRequest = mySignupRequests.find((request) => request.status === "approved" && request.companyId);
     if (approvedRequest) {
       selectedCompanyId = approvedRequest.companyId;
