@@ -243,6 +243,27 @@ function withTimeout(promise, ms, fallback) {
   ]);
 }
 
+function settleWithTimeout(promise, ms) {
+  return Promise.race([
+    promise.then(
+      (value) => ({ status: "resolved", value }),
+      (error) => ({ status: "rejected", error }),
+    ),
+    new Promise((resolve) => setTimeout(() => resolve({ status: "timeout" }), ms)),
+  ]);
+}
+
+async function loadWorkspaceWithLoading(message) {
+  loadingMessage = message;
+  renderLoading();
+  const result = await settleWithTimeout(loadWorkspaceState(), 12000);
+  if (result.status === "rejected") throw result.error;
+  if (result.status === "timeout") {
+    state ||= emptyLocalState();
+    toast("Workspace data is taking longer than expected. Showing the app with available data.");
+  }
+}
+
 async function api(path, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 8000);
@@ -328,11 +349,13 @@ async function refreshFirebaseState() {
 
 async function bootstrap() {
   renderLoading();
-  try {
-    await completeRedirectSignIn();
-  } catch (error) {
-    renderError(new Error(friendlyAuthMessage(error)));
+  const redirectResult = await settleWithTimeout(completeRedirectSignIn(), 8000);
+  if (redirectResult.status === "rejected") {
+    renderError(new Error(friendlyAuthMessage(redirectResult.error)));
     return;
+  }
+  if (redirectResult.status === "timeout") {
+    toast("Google sign-in is taking longer than expected. Continuing with the current session.");
   }
   listenForAuth(async (user) => {
     authUser = user;
@@ -932,7 +955,7 @@ function render() {
 
 async function hydrateAfterWrite(message) {
   await refreshFirebaseState();
-  await loadWorkspaceState();
+  await loadWorkspaceWithLoading("Refreshing company workspace...");
   toast(message);
   render();
 }
@@ -1013,7 +1036,7 @@ window.openLocalWorkspace = async function openLocalWorkspace() {
   localStorage.setItem("localWorkspace", "true");
   localStorage.removeItem("selectedCompanyId");
   localStorage.setItem("authIntent", authIntent);
-  await loadWorkspaceState();
+  await loadWorkspaceWithLoading("Opening local workspace...");
   render();
 };
 
@@ -1029,7 +1052,7 @@ window.selectCompany = async function selectCompany(companyId) {
   localStorage.setItem("selectedCompanyId", companyId);
   localStorage.removeItem("localWorkspace");
   localStorage.setItem("authIntent", authIntent);
-  await loadWorkspaceState();
+  await loadWorkspaceWithLoading("Opening company workspace...");
   activeView = "dashboard";
   render();
 };
@@ -1175,7 +1198,7 @@ window.openAdminCompany = async function openAdminCompany(requestId) {
   localStorage.setItem("selectedCompanyId", selectedCompanyId);
   localStorage.removeItem("localWorkspace");
   localStorage.setItem("authIntent", authIntent);
-  await loadWorkspaceState();
+  await loadWorkspaceWithLoading("Opening company workspace...");
   activeView = "dashboard";
   render();
 };
