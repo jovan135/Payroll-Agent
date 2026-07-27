@@ -209,6 +209,11 @@ button {
   background: var(--accent-dark);
 }
 
+.danger-btn {
+  background: #fbe7e7;
+  color: var(--danger);
+}
+
 .disabled-action,
 .disabled-action:hover {
   background: #8ea0ad;
@@ -404,6 +409,62 @@ th {
   overflow-wrap: anywhere;
 }
 
+.payroll-summary-grid {
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  margin-bottom: 14px;
+}
+
+.run-review {
+  border-top: 1px solid var(--line);
+  padding: 18px 0 4px;
+}
+
+.run-review:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.run-review-head,
+.run-review-actions,
+.run-output-row,
+.compact-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.run-review-head {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.run-review h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.run-review-actions,
+.run-output-row {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.compact-actions .btn {
+  min-height: 32px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.review-table {
+  min-width: 920px;
+}
+
+.run-output-row {
+  margin-top: 12px;
+}
+
 .form-section {
   display: grid;
   gap: 10px;
@@ -578,7 +639,8 @@ select {
   .kpis,
   .two-col,
   .form-grid,
-  .detail-grid {
+  .detail-grid,
+  .payroll-summary-grid {
     grid-template-columns: 1fr;
   }
 

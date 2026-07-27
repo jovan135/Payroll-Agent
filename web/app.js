@@ -15,6 +15,7 @@ import {
   saveCompanyProfile,
   signInWithGoogle,
   signOutUser,
+  updateCompanyPayrollRunStatus,
 } from "./firebase-client.js";
 
 const companyNavItems = [
@@ -186,6 +187,19 @@ function money(value) {
 }
 
 function normalizeRun(run) {
+  const rows = Array.isArray(run.rows) ? run.rows.map((row) => ({
+    employeeId: row.employeeId || row.employee_id || "",
+    fullName: row.fullName || row.full_name || "",
+    nisNumber: row.nisNumber || row.nis_number || "",
+    nisClass: row.nisClass || row.nis_class || "",
+    grossPay: Number(row.grossPay ?? row.gross_pay ?? 0),
+    nisEmployee: Number(row.nisEmployee ?? row.nis_employee ?? 0),
+    nisEmployer: Number(row.nisEmployer ?? row.nis_employer ?? 0),
+    paye: Number(row.paye ?? 0),
+    healthSurcharge: Number(row.healthSurcharge ?? row.health_surcharge ?? 0),
+    totalDeductions: Number(row.totalDeductions ?? row.total_deductions ?? 0),
+    netPay: Number(row.netPay ?? row.net_pay ?? 0),
+  })) : [];
   return {
     id: run.id || run.month,
     month: run.month || run.id || "",
@@ -197,8 +211,15 @@ function normalizeRun(run) {
     gross: Number(run.gross ?? run.grossPay ?? 0),
     deductions: Number(run.deductions ?? run.totalDeductions ?? 0),
     net: Number(run.net ?? run.netPay ?? 0),
+    nis_employee: Number(run.nisEmployee ?? run.nis_employee ?? 0),
+    nis_employer: Number(run.nisEmployer ?? run.nis_employer ?? 0),
+    paye: Number(run.paye ?? 0),
+    health_surcharge: Number(run.healthSurcharge ?? run.health_surcharge ?? 0),
+    monday_count: Number(run.mondayCount ?? run.monday_count ?? 0),
+    rows,
     payslips: Array.isArray(run.payslips) ? run.payslips : [],
     status: run.status || "draft",
+    note: run.note || "",
   };
 }
 
@@ -681,7 +702,7 @@ function subtitleFor(id) {
   return {
     dashboard: "Track company payroll readiness, reminders, statutory forms, and monthly runs.",
     employees: "Add and maintain employee records used by NIS, PAYE, Health Surcharge, and payslips.",
-    runs: "Review generated payroll files, payslips, NI184, and NI187 outputs.",
+    runs: "Review draft payroll totals before approving final payroll files.",
     payslips: "Open generated payslips grouped by employee.",
     reports: "Compare gross pay, deductions, net pay, and employer costs.",
     settings: "Control reminder timing and scheduled payroll preferences.",
@@ -814,34 +835,117 @@ function runList(runs) {
   if (!runs.length) return `<p>No payroll runs found.</p>`;
   return `<div class="activity">${runs.map((run) => `
     <div>
-      <span><strong>${escapeHtml(run.month)}</strong><br><span class="caption">${run.employees} employee(s), ${run.has_payroll ? "payroll complete" : "NIS only"}</span></span>
+      <span><strong>${escapeHtml(run.month)}</strong><br><span class="caption">${run.employees} employee(s), ${runStatusLabel(run)}</span></span>
       <span class="right"><strong>${money(run.net)}</strong><br>${formBadges(run)}</span>
     </div>
   `).join("")}</div>`;
 }
 
 function formBadges(run) {
-  const ni184 = run.has_ni184 ? `<a class="mini-link" href="/runs/${run.month}/NI184-filled.pdf" target="_blank">NI184</a>` : `<span class="status warning">NI184</span>`;
-  const ni187 = run.has_ni187 ? `<a class="mini-link" href="/runs/${run.month}/NI187-filled.pdf" target="_blank">NI187</a>` : `<span class="status warning">NI187</span>`;
+  const ni184 = run.has_ni184 ? `<a class="mini-link" href="/runs/${run.month}/NI184-filled.pdf" target="_blank">NI184</a>` : `<span class="status neutral">NI184 pending</span>`;
+  const ni187 = run.has_ni187 ? `<a class="mini-link" href="/runs/${run.month}/NI187-filled.pdf" target="_blank">NI187</a>` : `<span class="status neutral">NI187 pending</span>`;
   return `<span class="form-links">${ni184}${ni187}</span>`;
+}
+
+function runStatusLabel(run) {
+  if (run.status === "approved") return "Approved";
+  if (run.status === "cancelled") return "Cancelled";
+  if (run.status === "draft") return "Draft";
+  if (run.has_payroll) return "Complete";
+  return "NIS only";
+}
+
+function runStatusBadge(run) {
+  const label = runStatusLabel(run);
+  const tone = run.status === "approved" ? "success"
+    : run.status === "cancelled" ? "danger"
+      : run.status === "draft" ? "warning"
+        : run.has_payroll ? "success" : "neutral";
+  return `<span class="status ${tone}">${label}</span>`;
+}
+
+function runActionButtons(run) {
+  if (localWorkspace || !selectedCompanyId || run.status !== "draft") return "";
+  return `
+    <div class="actions compact-actions">
+      <button class="btn primary" onclick="approvePayrollRun('${escapeHtml(run.month)}')">Approve</button>
+      <button class="btn danger-btn" onclick="cancelPayrollRun('${escapeHtml(run.month)}')">Cancel</button>
+    </div>
+  `;
+}
+
+function runReviewSummary(run) {
+  return `
+    <div class="detail-grid payroll-summary-grid">
+      <div><span>Gross income</span><strong>${money(run.gross)}</strong></div>
+      <div><span>Employee NIS</span><strong>${money(run.nis_employee)}</strong></div>
+      <div><span>PAYE</span><strong>${money(run.paye)}</strong></div>
+      <div><span>Health Surcharge</span><strong>${money(run.health_surcharge)}</strong></div>
+      <div><span>Total deductions</span><strong>${money(run.deductions)}</strong></div>
+      <div><span>Net pay</span><strong>${money(run.net)}</strong></div>
+      <div><span>Employer NIS</span><strong>${money(run.nis_employer)}</strong></div>
+      <div><span>NIS weeks</span><strong>${run.monday_count || "-"}</strong></div>
+      <div><span>Outputs</span><strong>${run.has_ni184 || run.has_ni187 || run.payslips.length ? "Generated" : "Not generated"}</strong></div>
+    </div>
+  `;
+}
+
+function runEmployeeBreakdown(run) {
+  if (!run.rows.length) return `<p>No employee calculation rows were stored for this run.</p>`;
+  return `
+    <div class="table-scroll">
+      <table class="review-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>NIS class</th>
+            <th class="money">Gross</th>
+            <th class="money">NIS</th>
+            <th class="money">PAYE</th>
+            <th class="money">Health</th>
+            <th class="money">Total deductions</th>
+            <th class="money">Net pay</th>
+          </tr>
+        </thead>
+        <tbody>${run.rows.map((row) => `
+          <tr>
+            <td><strong>${escapeHtml(row.fullName || row.employeeId)}</strong><br><span class="caption">${escapeHtml(row.employeeId)} ${escapeHtml(row.nisNumber || "")}</span></td>
+            <td>${escapeHtml(row.nisClass || "")}</td>
+            <td class="money">${money(row.grossPay)}</td>
+            <td class="money">${money(row.nisEmployee)}</td>
+            <td class="money">${money(row.paye)}</td>
+            <td class="money">${money(row.healthSurcharge)}</td>
+            <td class="money">${money(row.totalDeductions)}</td>
+            <td class="money"><strong>${money(row.netPay)}</strong></td>
+          </tr>
+        `).join("")}</tbody>
+      </table>
+    </div>
+  `;
 }
 
 function runTable(runs) {
   if (!runs.length) return `<p>No payroll runs found.</p>`;
-  return `
-    <table>
-      <thead><tr><th>Month</th><th>Employees</th><th>Payroll</th><th>NIS Forms</th><th class="money">Net Pay</th></tr></thead>
-      <tbody>${runs.map((run) => `
-        <tr>
-          <td>${escapeHtml(run.month)}</td>
-          <td>${run.employees}</td>
-          <td><span class="status ${run.has_payroll ? "success" : "neutral"}">${run.has_payroll ? "Complete" : "NIS only"}</span></td>
-          <td>${formBadges(run)}</td>
-          <td class="money">${money(run.net)}</td>
-        </tr>
-      `).join("")}</tbody>
-    </table>
-  `;
+  return runs.map((run) => `
+    <div class="run-review">
+      <div class="run-review-head">
+        <div>
+          <h3>${escapeHtml(run.month)}</h3>
+          <span class="caption">${run.employees} employee(s)</span>
+        </div>
+        <div class="run-review-actions">
+          ${runStatusBadge(run)}
+          ${runActionButtons(run)}
+        </div>
+      </div>
+      ${runReviewSummary(run)}
+      ${runEmployeeBreakdown(run)}
+      <div class="run-output-row">
+        <span>${formBadges(run)}</span>
+        ${run.payslips.length ? `<span class="status success">${run.payslips.length} payslip${run.payslips.length === 1 ? "" : "s"}</span>` : `<span class="status neutral">Payslips pending</span>`}
+      </div>
+    </div>
+  `).join("");
 }
 
 function payslipsView() {
@@ -1214,6 +1318,33 @@ window.runPayroll = async function runPayroll() {
     }
     activeView = "runs";
     toast(payload.status === "draft" ? `Draft payroll created for ${month}.` : `Payroll completed for ${month}.`);
+    render();
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+window.approvePayrollRun = async function approvePayrollRun(month) {
+  if (!selectedCompanyId || localWorkspace) return toast("Open a hosted company workspace before approving payroll.");
+  try {
+    await updateCompanyPayrollRunStatus(selectedCompanyId, month, "approved");
+    await loadWorkspaceWithLoading("Refreshing payroll review...");
+    activeView = "runs";
+    toast(`Payroll draft approved for ${month}.`);
+    render();
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+window.cancelPayrollRun = async function cancelPayrollRun(month) {
+  if (!selectedCompanyId || localWorkspace) return toast("Open a hosted company workspace before cancelling payroll.");
+  if (!window.confirm(`Cancel the draft payroll for ${month}? You can run payroll again after making changes.`)) return;
+  try {
+    await updateCompanyPayrollRunStatus(selectedCompanyId, month, "cancelled");
+    await loadWorkspaceWithLoading("Refreshing payroll review...");
+    activeView = "runs";
+    toast(`Payroll draft cancelled for ${month}.`);
     render();
   } catch (error) {
     toast(error.message);

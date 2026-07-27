@@ -52,6 +52,8 @@ async function runHostedPayroll() {
 
   localStorage.setItem("lastHostedPayrollRun", JSON.stringify({
     month,
+    gross: payload.run?.grossPay || payload.run?.gross || 0,
+    deductions: payload.run?.totalDeductions || payload.run?.deductions || 0,
     net: payload.run?.netPay || payload.run?.net || 0,
     employees: payload.run?.employeeCount || payload.run?.employees || 0,
     generatedAt: new Date().toISOString(),
@@ -95,7 +97,7 @@ function patchHostedControls() {
     const note = document.createElement("div");
     note.className = "notice";
     note.dataset.hostedRunNote = "true";
-    note.textContent = `Latest hosted draft payroll: ${latest.month}, ${latest.employees} employee(s), net pay TTD ${Number(latest.net).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
+    note.textContent = `Latest hosted draft payroll: ${latest.month}, ${latest.employees} employee(s), gross TTD ${Number(latest.gross || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, deductions TTD ${Number(latest.deductions || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}, net pay TTD ${Number(latest.net || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`;
     panel?.insertBefore(note, panel.children[1] || null);
   }
 }

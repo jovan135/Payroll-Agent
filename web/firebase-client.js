@@ -257,3 +257,12 @@ export async function loadCompanyPayrollRuns(companyId) {
   const snapshot = await getDocs(collection(db, "companies", companyId, "payrollRuns"));
   return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
 }
+
+export async function updateCompanyPayrollRunStatus(companyId, month, status) {
+  await updateDoc(doc(db, "companies", companyId, "payrollRuns", month), {
+    status,
+    updatedAt: serverTimestamp(),
+    ...(status === "approved" ? { approvedAt: serverTimestamp() } : {}),
+    ...(status === "cancelled" ? { cancelledAt: serverTimestamp() } : {}),
+  });
+}
