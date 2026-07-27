@@ -187,10 +187,21 @@ function money(value) {
 }
 
 function normalizeRun(run) {
+  const payslips = Array.isArray(run.payslips) ? run.payslips.map((payslip) => (
+    typeof payslip === "string"
+      ? { fileName: payslip, employeeId: payslip.split("-")[0], fullName: "", html: "" }
+      : {
+        fileName: payslip.fileName || payslip.file || "",
+        employeeId: payslip.employeeId || payslip.employee_id || "",
+        fullName: payslip.fullName || payslip.full_name || "",
+        html: payslip.html || "",
+      }
+  )) : [];
   const rows = Array.isArray(run.rows) ? run.rows.map((row) => ({
     employeeId: row.employeeId || row.employee_id || "",
     fullName: row.fullName || row.full_name || "",
     nisNumber: row.nisNumber || row.nis_number || "",
+    birNumber: row.birNumber || row.bir_number || "",
     nisClass: row.nisClass || row.nis_class || "",
     grossPay: Number(row.grossPay ?? row.gross_pay ?? 0),
     nisEmployee: Number(row.nisEmployee ?? row.nis_employee ?? 0),
@@ -217,7 +228,8 @@ function normalizeRun(run) {
     health_surcharge: Number(run.healthSurcharge ?? run.health_surcharge ?? 0),
     monday_count: Number(run.mondayCount ?? run.monday_count ?? 0),
     rows,
-    payslips: Array.isArray(run.payslips) ? run.payslips : [],
+    payslips,
+    outputs: run.outputs || {},
     status: run.status || "draft",
     note: run.note || "",
   };
@@ -842,9 +854,23 @@ function runList(runs) {
 }
 
 function formBadges(run) {
-  const ni184 = run.has_ni184 ? `<a class="mini-link" href="/runs/${run.month}/NI184-filled.pdf" target="_blank">NI184</a>` : `<span class="status neutral">NI184 pending</span>`;
-  const ni187 = run.has_ni187 ? `<a class="mini-link" href="/runs/${run.month}/NI187-filled.pdf" target="_blank">NI187</a>` : `<span class="status neutral">NI187 pending</span>`;
+  const ni184 = run.outputs?.ni184Html
+    ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni184Html', 'html')">NI184 draft</button>`
+    : `<span class="status neutral">NI184 pending</span>`;
+  const ni187 = run.outputs?.ni187Html
+    ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni187Html', 'html')">NI187 draft</button>`
+    : `<span class="status neutral">NI187 pending</span>`;
   return `<span class="form-links">${ni184}${ni187}</span>`;
+}
+
+function outputLinks(run) {
+  if (!run.outputs?.payrollSummaryMarkdown && !run.outputs?.payrollCsv) return "";
+  return `
+    <span class="form-links">
+      ${run.outputs.payrollSummaryMarkdown ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'payrollSummaryMarkdown', 'markdown')">Summary</button>` : ""}
+      ${run.outputs.payrollCsv ? `<button class="mini-link" onclick="downloadPayrollArtifact('${escapeHtml(run.month)}', 'payrollCsv', 'payroll-${escapeHtml(run.month)}.csv', 'text/csv')">Payroll CSV</button>` : ""}
+    </span>
+  `;
 }
 
 function runStatusLabel(run) {
@@ -941,8 +967,9 @@ function runTable(runs) {
       ${runReviewSummary(run)}
       ${runEmployeeBreakdown(run)}
       <div class="run-output-row">
+        ${outputLinks(run)}
         <span>${formBadges(run)}</span>
-        ${run.payslips.length ? `<span class="status success">${run.payslips.length} payslip${run.payslips.length === 1 ? "" : "s"}</span>` : `<span class="status neutral">Payslips pending</span>`}
+        ${run.payslips.length ? `<button class="mini-link" onclick="setView('payslips')">${run.payslips.length} payslip${run.payslips.length === 1 ? "" : "s"}</button>` : `<span class="status neutral">Payslips pending</span>`}
       </div>
     </div>
   `).join("");
@@ -954,17 +981,17 @@ function payslipsView() {
   const grouped = new Map();
   state.runs.forEach((run) => {
     run.payslips.forEach((file) => {
-      const employeeId = file.split("-")[0];
+      const employeeId = file.employeeId || file.fileName?.split("-")[0] || "";
       const employee = employeeMap.get(employeeId);
       const key = employeeId || "unknown";
       if (!grouped.has(key)) {
         grouped.set(key, {
           employeeId: key,
-          name: employee ? fullName(employee) : key,
+          name: file.fullName || (employee ? fullName(employee) : key),
           files: [],
         });
       }
-      grouped.get(key).files.push({ month: run.month, file });
+      grouped.get(key).files.push({ month: run.month, fileName: file.fileName, html: file.html });
     });
   });
 
@@ -979,7 +1006,7 @@ function payslipsView() {
             <span class="status neutral">${group.files.length} payslip${group.files.length === 1 ? "" : "s"}</span>
           </div>
           <div class="activity">
-            ${group.files.map((item) => `<a href="/runs/${item.month}/payslips/${item.file}" target="_blank"><span>${escapeHtml(item.month)}</span><strong>Open payslip</strong></a>`).join("")}
+            ${group.files.map((item) => `<button class="activity-button" onclick="openPayslip('${escapeHtml(item.month)}', '${escapeHtml(item.fileName)}')"><span>${escapeHtml(item.month)}</span><strong>Open payslip</strong></button>`).join("")}
           </div>
         </div>
       `).join("") || "<p>No payslips generated yet.</p>"}
@@ -1000,6 +1027,29 @@ function reportsView() {
       </table>
     </section>
   `;
+}
+
+function payrollRun(month) {
+  return state.runs.find((run) => run.month === month) || null;
+}
+
+function openTextBlob(content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function downloadTextBlob(content, fileName, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 function settingsView() {
@@ -1327,10 +1377,20 @@ window.runPayroll = async function runPayroll() {
 window.approvePayrollRun = async function approvePayrollRun(month) {
   if (!selectedCompanyId || localWorkspace) return toast("Open a hosted company workspace before approving payroll.");
   try {
-    await updateCompanyPayrollRunStatus(selectedCompanyId, month, "approved");
+    toast(`Finalizing payroll outputs for ${month}...`);
+    const token = await getAuthToken();
+    await api("/api/finalize-payroll", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ companyId: selectedCompanyId, month }),
+      timeoutMs: 20000,
+    });
     await loadWorkspaceWithLoading("Refreshing payroll review...");
     activeView = "runs";
-    toast(`Payroll draft approved for ${month}.`);
+    toast(`Payroll approved and outputs generated for ${month}.`);
     render();
   } catch (error) {
     toast(error.message);
@@ -1349,6 +1409,31 @@ window.cancelPayrollRun = async function cancelPayrollRun(month) {
   } catch (error) {
     toast(error.message);
   }
+};
+
+window.openPayrollArtifact = function openPayrollArtifact(month, key, type) {
+  const run = payrollRun(month);
+  const content = run?.outputs?.[key];
+  if (!content) return toast("That payroll output has not been generated yet.");
+  if (type === "markdown") {
+    openTextBlob(`<pre>${escapeHtml(content)}</pre>`, "text/html");
+    return;
+  }
+  openTextBlob(content, "text/html");
+};
+
+window.downloadPayrollArtifact = function downloadPayrollArtifact(month, key, fileName, mimeType) {
+  const run = payrollRun(month);
+  const content = run?.outputs?.[key];
+  if (!content) return toast("That payroll output has not been generated yet.");
+  downloadTextBlob(content, fileName, mimeType);
+};
+
+window.openPayslip = function openPayslip(month, fileName) {
+  const run = payrollRun(month);
+  const payslip = run?.payslips.find((item) => item.fileName === fileName);
+  if (!payslip?.html) return toast("That payslip has not been generated yet.");
+  openTextBlob(payslip.html, "text/html");
 };
 
 window.explainPayrollUnavailable = function explainPayrollUnavailable() {

@@ -505,6 +505,7 @@ select {
 }
 
 .activity a,
+.activity button,
 .activity div {
   display: flex;
   justify-content: space-between;
@@ -514,6 +515,13 @@ select {
   border-bottom: 1px solid var(--line);
   color: inherit;
   text-decoration: none;
+}
+
+.activity button {
+  width: 100%;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 
 .form-links {
