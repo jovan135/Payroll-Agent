@@ -103,17 +103,26 @@ function buildPayrollCsv(run) {
     "full_name",
     "nis_number",
     "bir_number",
+    "base_salary",
+    "taxable_additions",
+    "gross_reductions",
     "regular_earnings",
+    "adjusted_gross",
     "gross_pay",
+    "non_taxable_reimbursements",
     "annualized_income",
     "annual_chargeable_income",
     "annual_paye",
     "paye",
     "nis_employee",
     "health_surcharge",
+    "statutory_deductions",
+    "pre_tax_deductions",
+    "post_tax_deductions",
     "total_deductions",
     "net_pay",
     "nis_employer",
+    "adjustments",
   ];
   const lines = [headers.join(",")];
   for (const row of run.rows || []) {
@@ -123,17 +132,26 @@ function buildPayrollCsv(run) {
       full_name: row.fullName,
       nis_number: row.nisNumber,
       bir_number: row.birNumber,
-      regular_earnings: money(row.grossPay),
+      base_salary: money(row.baseSalary ?? row.grossPay),
+      taxable_additions: money(row.taxableAdditions),
+      gross_reductions: money(row.grossReductions),
+      regular_earnings: money(row.baseSalary ?? row.grossPay),
+      adjusted_gross: money(row.adjustedGross ?? row.grossPay),
       gross_pay: money(row.grossPay),
+      non_taxable_reimbursements: money(row.nonTaxableReimbursements),
       annualized_income: money(row.annualizedIncome),
       annual_chargeable_income: money(row.annualChargeableIncome),
       annual_paye: money(row.annualPaye),
       paye: money(row.paye),
       nis_employee: money(row.nisEmployee),
       health_surcharge: money(row.healthSurcharge),
+      statutory_deductions: money(row.statutoryDeductions),
+      pre_tax_deductions: money(row.preTaxDeductions),
+      post_tax_deductions: money(row.postTaxDeductions),
       total_deductions: money(row.totalDeductions),
       net_pay: money(row.netPay),
       nis_employer: money(row.nisEmployer),
+      adjustments: (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)} (${adjustment.treatment})`).join("; "),
     }[header])).join(","));
   }
   return `${lines.join("\n")}\n`;
@@ -146,22 +164,35 @@ function buildPayrollSummary(run) {
     `- Status: Approved`,
     `- Active employees included: ${run.employeeCount || run.employees || 0}`,
     `- Gross pay: TTD ${money(run.grossPay || run.gross)}`,
+    `- Taxable additions: TTD ${money(run.taxableAdditions)}`,
+    `- Gross reductions: TTD ${money(run.grossReductions)}`,
     `- Employee NIS deductions: TTD ${money(run.nisEmployee)}`,
     `- PAYE deductions: TTD ${money(run.paye)}`,
     `- Health Surcharge deductions: TTD ${money(run.healthSurcharge)}`,
+    `- Pre-tax deductions: TTD ${money(run.preTaxDeductions)}`,
+    `- Other deductions after statutory: TTD ${money(run.postTaxDeductions)}`,
+    `- Non-taxable reimbursements: TTD ${money(run.nonTaxableReimbursements)}`,
     `- Total employee deductions: TTD ${money(run.totalDeductions || run.deductions)}`,
     `- Net pay: TTD ${money(run.netPay || run.net)}`,
     `- Employer NIS cost: TTD ${money(run.nisEmployer)}`,
     "",
     "## Employees",
     "",
-    "| Employee ID | Name | Gross | NIS | PAYE | Health Surcharge | Total Deductions | Net Pay |",
-    "|---|---|---:|---:|---:|---:|---:|---:|",
+    "| Employee ID | Name | Base Salary | Adjustments | Adjusted Gross | Statutory | Other Deductions | Reimbursements | Net Pay |",
+    "|---|---|---:|---|---:|---:|---:|---:|---:|",
   ];
   for (const row of run.rows || []) {
-    lines.push(`| ${row.employeeId} | ${row.fullName} | ${money(row.grossPay)} | ${money(row.nisEmployee)} | ${money(row.paye)} | ${money(row.healthSurcharge)} | ${money(row.totalDeductions)} | ${money(row.netPay)} |`);
+    const adjustments = (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)}`).join("<br>") || "-";
+    lines.push(`| ${row.employeeId} | ${row.fullName} | ${money(row.baseSalary ?? row.grossPay)} | ${adjustments} | ${money(row.adjustedGross ?? row.grossPay)} | ${money(row.statutoryDeductions)} | ${money(Number(row.preTaxDeductions || 0) + Number(row.postTaxDeductions || 0))} | ${money(row.nonTaxableReimbursements)} | ${money(row.netPay)} |`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+function adjustmentHtmlRows(row, treatment, sign = "") {
+  return (row.adjustments || [])
+    .filter((adjustment) => adjustment.treatment === treatment)
+    .map((adjustment) => `<tr><td>${escapeHtml(adjustment.label)}</td><td>${sign}TTD ${money(adjustment.amount)}</td></tr>`)
+    .join("");
 }
 
 function buildPayslipHtml(row, run, company) {
@@ -210,8 +241,11 @@ function buildPayslipHtml(row, run, company) {
     <h2>Earnings</h2>
     <table>
       <tr><th>Description</th><th>Amount</th></tr>
-      <tr><td>Regular monthly salary</td><td>TTD ${money(row.grossPay)}</td></tr>
-      <tr><td><strong>Gross Pay</strong></td><td><strong>TTD ${money(row.grossPay)}</strong></td></tr>
+      <tr><td>Regular monthly salary</td><td>TTD ${money(row.baseSalary ?? row.grossPay)}</td></tr>
+      ${adjustmentHtmlRows(row, "taxable_addition")}
+      ${adjustmentHtmlRows(row, "reduce_gross", "-")}
+      <tr><td><strong>Adjusted Gross Pay</strong></td><td><strong>TTD ${money(row.adjustedGross ?? row.grossPay)}</strong></td></tr>
+      ${adjustmentHtmlRows(row, "non_taxable_reimbursement")}
     </table>
     <h2>Deductions</h2>
     <table>
@@ -219,6 +253,8 @@ function buildPayslipHtml(row, run, company) {
       <tr><td>NIS employee contribution</td><td>TTD ${money(row.nisEmployee)}</td></tr>
       <tr><td>PAYE</td><td>TTD ${money(row.paye)}</td></tr>
       <tr><td>Health Surcharge</td><td>TTD ${money(row.healthSurcharge)}</td></tr>
+      ${adjustmentHtmlRows(row, "pre_tax_deduction")}
+      ${adjustmentHtmlRows(row, "deduction_after_statutory")}
       <tr><td><strong>Total Deductions</strong></td><td><strong>TTD ${money(row.totalDeductions)}</strong></td></tr>
     </table>
     <div class="net">Net Pay: TTD ${money(row.netPay)}</div>

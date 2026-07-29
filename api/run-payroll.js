@@ -158,6 +158,13 @@ function findNisRate(monthlySalary) {
   return rate;
 }
 
+function nisRateForAdjustedGross(adjustedGross) {
+  if (adjustedGross < NIS_RATES[0].monthlyMin) {
+    return { nisClass: "-", employeeWeekly: 0, employerWeekly: 0 };
+  }
+  return findNisRate(adjustedGross);
+}
+
 function calculateAnnualPaye(chargeableIncome) {
   let remaining = chargeableIncome;
   let previousCap = 0;
@@ -183,6 +190,43 @@ function calculateHealthSurcharge(employee, monthlySalary, weeks, asOfDate) {
   return cents(weeklyRate * weeks);
 }
 
+function adjustmentLabel(adjustment) {
+  return adjustment.label || adjustment.type || "Adjustment";
+}
+
+function employeeAdjustments(employee, month) {
+  const adjustments = employeeValue(employee, "payroll_adjustments", "payrollAdjustments", {});
+  const rows = Array.isArray(adjustments?.[month]) ? adjustments[month] : [];
+  return rows.map((adjustment) => ({
+    type: adjustment.type || "other_deduction",
+    label: adjustmentLabel(adjustment),
+    amount: cents(Number(adjustment.amount || 0)),
+    treatment: adjustment.treatment || "deduction_after_statutory",
+    note: adjustment.note || "",
+  })).filter((adjustment) => adjustment.amount > 0);
+}
+
+function adjustmentTotals(adjustments) {
+  const totals = {
+    taxableAdditions: 0,
+    grossReductions: 0,
+    preTaxDeductions: 0,
+    postTaxDeductions: 0,
+    nonTaxableReimbursements: 0,
+  };
+  for (const adjustment of adjustments) {
+    if (adjustment.treatment === "taxable_addition") totals.taxableAdditions += adjustment.amount;
+    if (adjustment.treatment === "reduce_gross") totals.grossReductions += adjustment.amount;
+    if (adjustment.treatment === "pre_tax_deduction") totals.preTaxDeductions += adjustment.amount;
+    if (adjustment.treatment === "deduction_after_statutory") totals.postTaxDeductions += adjustment.amount;
+    if (adjustment.treatment === "non_taxable_reimbursement") totals.nonTaxableReimbursements += adjustment.amount;
+  }
+  Object.keys(totals).forEach((key) => {
+    totals[key] = cents(totals[key]);
+  });
+  return totals;
+}
+
 function calculatePayroll(month, employees) {
   const weeks = mondayCount(month);
   const asOfDate = monthEnd(month);
@@ -193,6 +237,12 @@ function calculatePayroll(month, employees) {
     nisEmployer: 0,
     paye: 0,
     healthSurcharge: 0,
+    taxableAdditions: 0,
+    grossReductions: 0,
+    preTaxDeductions: 0,
+    postTaxDeductions: 0,
+    nonTaxableReimbursements: 0,
+    statutoryDeductions: 0,
     totalDeductions: 0,
     netPay: 0,
   };
@@ -207,18 +257,22 @@ function calculatePayroll(month, employees) {
     if (!nisNumber) throw new Error(`Employee ${employeeId} needs an NIS number.`);
     if (!monthlySalary || monthlySalary <= 0) throw new Error(`Employee ${employeeId} needs a positive monthly salary.`);
 
-    const nisRate = findNisRate(monthlySalary);
-    const annualIncome = monthlySalary * TAX_SETTINGS.periodsPerYear;
+    const adjustments = employeeAdjustments(employee, month);
+    const adjustmentTotal = adjustmentTotals(adjustments);
+    const adjustedGross = cents(Math.max(0, monthlySalary + adjustmentTotal.taxableAdditions - adjustmentTotal.grossReductions));
+    const nisRate = nisRateForAdjustedGross(adjustedGross);
+    const annualIncome = adjustedGross * TAX_SETTINGS.periodsPerYear;
     const td1Allowances = Number(employeeValue(employee, "td1_annual_allowances", "td1AnnualAllowances", 0) || 0);
     const pension = Number(employeeValue(employee, "approved_pension_or_annuity", "approvedPensionOrAnnuity", 0) || 0);
-    const chargeableIncome = Math.max(0, annualIncome - TAX_SETTINGS.personalAllowanceAnnual - td1Allowances - pension);
+    const chargeableIncome = Math.max(0, annualIncome - TAX_SETTINGS.personalAllowanceAnnual - td1Allowances - pension - (adjustmentTotal.preTaxDeductions * TAX_SETTINGS.periodsPerYear));
     const annualPaye = calculateAnnualPaye(chargeableIncome);
     const paye = cents(annualPaye / TAX_SETTINGS.periodsPerYear);
-    const healthSurcharge = calculateHealthSurcharge(employee, monthlySalary, weeks, asOfDate);
+    const healthSurcharge = calculateHealthSurcharge(employee, adjustedGross, weeks, asOfDate);
     const nisEmployee = cents(nisRate.employeeWeekly * weeks);
     const nisEmployer = cents(nisRate.employerWeekly * weeks);
-    const totalDeductions = cents(nisEmployee + paye + healthSurcharge);
-    const netPay = cents(monthlySalary - totalDeductions);
+    const statutoryDeductions = cents(nisEmployee + paye + healthSurcharge);
+    const totalDeductions = cents(statutoryDeductions + adjustmentTotal.preTaxDeductions + adjustmentTotal.postTaxDeductions);
+    const netPay = cents(adjustedGross + adjustmentTotal.nonTaxableReimbursements - totalDeductions);
 
     const row = {
       employeeId,
@@ -227,7 +281,11 @@ function calculatePayroll(month, employees) {
       birNumber: employeeValue(employee, "bir_number", "birNumber", ""),
       nisClass: nisRate.nisClass,
       mondayCount: weeks,
-      grossPay: cents(monthlySalary),
+      baseSalary: cents(monthlySalary),
+      taxableAdditions: adjustmentTotal.taxableAdditions,
+      grossReductions: adjustmentTotal.grossReductions,
+      adjustedGross,
+      grossPay: adjustedGross,
       annualizedIncome: cents(annualIncome),
       annualChargeableIncome: cents(chargeableIncome),
       annualPaye,
@@ -235,8 +293,13 @@ function calculatePayroll(month, employees) {
       nisEmployee,
       nisEmployer,
       healthSurcharge,
+      statutoryDeductions,
+      preTaxDeductions: adjustmentTotal.preTaxDeductions,
+      postTaxDeductions: adjustmentTotal.postTaxDeductions,
+      nonTaxableReimbursements: adjustmentTotal.nonTaxableReimbursements,
       totalDeductions,
       netPay,
+      adjustments,
     };
     rows.push(row);
     totals.gross += row.grossPay;
@@ -244,6 +307,12 @@ function calculatePayroll(month, employees) {
     totals.nisEmployer += row.nisEmployer;
     totals.paye += row.paye;
     totals.healthSurcharge += row.healthSurcharge;
+    totals.taxableAdditions += row.taxableAdditions;
+    totals.grossReductions += row.grossReductions;
+    totals.preTaxDeductions += row.preTaxDeductions;
+    totals.postTaxDeductions += row.postTaxDeductions;
+    totals.nonTaxableReimbursements += row.nonTaxableReimbursements;
+    totals.statutoryDeductions += row.statutoryDeductions;
     totals.totalDeductions += row.totalDeductions;
     totals.netPay += row.netPay;
   }
@@ -311,6 +380,12 @@ module.exports = async function handler(request, response) {
       nisEmployer: totals.nisEmployer,
       paye: totals.paye,
       healthSurcharge: totals.healthSurcharge,
+      taxableAdditions: totals.taxableAdditions,
+      grossReductions: totals.grossReductions,
+      preTaxDeductions: totals.preTaxDeductions,
+      postTaxDeductions: totals.postTaxDeductions,
+      nonTaxableReimbursements: totals.nonTaxableReimbursements,
+      statutoryDeductions: totals.statutoryDeductions,
       rows,
       payslips: [],
       generatedAt: new Date(),

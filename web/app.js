@@ -47,6 +47,34 @@ const fields = [
   ["approved_pension_or_annuity", "Pension/Annuity", "number"],
 ];
 
+const adjustmentTypes = [
+  ["salary_advance_repayment", "Salary advance repayment", "deduction_after_statutory"],
+  ["employee_loan_repayment", "Employee loan repayment", "deduction_after_statutory"],
+  ["no_pay_leave", "No-pay leave / unpaid absence", "reduce_gross"],
+  ["lateness_undertime", "Lateness / undertime deduction", "reduce_gross"],
+  ["bonus", "Bonus", "taxable_addition"],
+  ["commission", "Commission", "taxable_addition"],
+  ["overtime", "Overtime", "taxable_addition"],
+  ["allowance", "Allowance", "taxable_addition"],
+  ["back_pay", "Back pay", "taxable_addition"],
+  ["tips_service_charge", "Tips / service charge", "taxable_addition"],
+  ["reimbursement", "Reimbursement", "non_taxable_reimbursement"],
+  ["uniform_tools", "Uniform / tools deduction", "deduction_after_statutory"],
+  ["staff_purchase", "Staff purchase deduction", "deduction_after_statutory"],
+  ["pension_annuity", "Tax-deductible pension/annuity", "pre_tax_deduction"],
+  ["insurance_medical", "Insurance / medical deduction", "deduction_after_statutory"],
+  ["other_addition", "Other addition", "taxable_addition"],
+  ["other_deduction", "Other deduction", "deduction_after_statutory"],
+];
+
+const adjustmentTreatments = [
+  ["taxable_addition", "Add to taxable gross"],
+  ["reduce_gross", "Reduce gross pay"],
+  ["pre_tax_deduction", "Pre-tax deduction"],
+  ["deduction_after_statutory", "Deduct after statutory deductions"],
+  ["non_taxable_reimbursement", "Non-taxable reimbursement"],
+];
+
 const defaultEmployee = {
   employee_id: "",
   surname: "",
@@ -62,6 +90,7 @@ const defaultEmployee = {
   td1_annual_allowances: "",
   approved_pension_or_annuity: "",
   health_surcharge_exempt: "",
+  payroll_adjustments: {},
   active: true,
 };
 
@@ -152,6 +181,7 @@ let authIntent = localStorage.getItem("authIntent") || "login";
 let state = null;
 let activeView = "dashboard";
 let editing = null;
+let payrollMonth = localStorage.getItem("payrollMonth") || latestMonth();
 let loadingMessage = "Connecting to Payroll Agent...";
 let backendUnavailable = false;
 
@@ -186,6 +216,39 @@ function money(value) {
   return `TTD ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function adjustmentTypeLabel(type) {
+  return adjustmentTypes.find(([id]) => id === type)?.[1] || type || "Adjustment";
+}
+
+function adjustmentTypeTreatment(type) {
+  return adjustmentTypes.find(([id]) => id === type)?.[2] || "deduction_after_statutory";
+}
+
+function adjustmentTreatmentLabel(treatment) {
+  return adjustmentTreatments.find(([id]) => id === treatment)?.[1] || treatment || "Deduct after statutory deductions";
+}
+
+function employeeAdjustments(employee, month = payrollMonth) {
+  const adjustments = employee?.payroll_adjustments || employee?.payrollAdjustments || {};
+  return Array.isArray(adjustments?.[month]) ? adjustments[month] : [];
+}
+
+function adjustmentTypeOptions(selectedType) {
+  return adjustmentTypes.map(([id, label]) => (
+    `<option value="${id}" ${id === selectedType ? "selected" : ""}>${escapeHtml(label)}</option>`
+  )).join("");
+}
+
+function adjustmentTreatmentOptions(selectedTreatment) {
+  return adjustmentTreatments.map(([id, label]) => (
+    `<option value="${id}" ${id === selectedTreatment ? "selected" : ""}>${escapeHtml(label)}</option>`
+  )).join("");
+}
+
+function adjustmentDisplayLabel(adjustment) {
+  return adjustment.label || adjustmentTypeLabel(adjustment.type);
+}
+
 function normalizeRun(run) {
   const payslips = Array.isArray(run.payslips) ? run.payslips.map((payslip) => (
     typeof payslip === "string"
@@ -204,12 +267,21 @@ function normalizeRun(run) {
     birNumber: row.birNumber || row.bir_number || "",
     nisClass: row.nisClass || row.nis_class || "",
     grossPay: Number(row.grossPay ?? row.gross_pay ?? 0),
+    baseSalary: Number(row.baseSalary ?? row.base_salary ?? row.grossPay ?? row.gross_pay ?? 0),
+    taxableAdditions: Number(row.taxableAdditions ?? row.taxable_additions ?? 0),
+    grossReductions: Number(row.grossReductions ?? row.gross_reductions ?? 0),
+    adjustedGross: Number(row.adjustedGross ?? row.adjusted_gross ?? row.grossPay ?? row.gross_pay ?? 0),
+    preTaxDeductions: Number(row.preTaxDeductions ?? row.pre_tax_deductions ?? 0),
+    postTaxDeductions: Number(row.postTaxDeductions ?? row.post_tax_deductions ?? 0),
+    nonTaxableReimbursements: Number(row.nonTaxableReimbursements ?? row.non_taxable_reimbursements ?? 0),
+    statutoryDeductions: Number(row.statutoryDeductions ?? row.statutory_deductions ?? 0),
     nisEmployee: Number(row.nisEmployee ?? row.nis_employee ?? 0),
     nisEmployer: Number(row.nisEmployer ?? row.nis_employer ?? 0),
     paye: Number(row.paye ?? 0),
     healthSurcharge: Number(row.healthSurcharge ?? row.health_surcharge ?? 0),
     totalDeductions: Number(row.totalDeductions ?? row.total_deductions ?? 0),
     netPay: Number(row.netPay ?? row.net_pay ?? 0),
+    adjustments: Array.isArray(row.adjustments) ? row.adjustments : [],
   })) : [];
   return {
     id: run.id || run.month,
@@ -222,6 +294,12 @@ function normalizeRun(run) {
     gross: Number(run.gross ?? run.grossPay ?? 0),
     deductions: Number(run.deductions ?? run.totalDeductions ?? 0),
     net: Number(run.net ?? run.netPay ?? 0),
+    taxable_additions: Number(run.taxableAdditions ?? run.taxable_additions ?? 0),
+    gross_reductions: Number(run.grossReductions ?? run.gross_reductions ?? 0),
+    pre_tax_deductions: Number(run.preTaxDeductions ?? run.pre_tax_deductions ?? 0),
+    post_tax_deductions: Number(run.postTaxDeductions ?? run.post_tax_deductions ?? 0),
+    non_taxable_reimbursements: Number(run.nonTaxableReimbursements ?? run.non_taxable_reimbursements ?? 0),
+    statutory_deductions: Number(run.statutoryDeductions ?? run.statutory_deductions ?? 0),
     nis_employee: Number(run.nisEmployee ?? run.nis_employee ?? 0),
     nis_employer: Number(run.nisEmployer ?? run.nis_employer ?? 0),
     paye: Number(run.paye ?? 0),
@@ -669,7 +747,7 @@ function topbarActions() {
   if (backendUnavailable && !canRunHostedPayroll) {
     return `
       <div class="actions">
-        <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}" disabled>
+        <input id="runMonth" type="month" value="${payrollMonth}" onchange="setPayrollMonth(this.value)" disabled>
         <label class="inline-check muted-control"><input id="generateNisForms" type="checkbox" checked disabled> NIS forms</label>
         <button class="btn primary disabled-action" onclick="explainPayrollUnavailable()">Payroll engine offline</button>
       </div>
@@ -677,7 +755,7 @@ function topbarActions() {
   }
   return `
     <div class="actions">
-      <input id="runMonth" type="month" value="${state.latest_run?.month || latestMonth()}">
+      <input id="runMonth" type="month" value="${payrollMonth}" onchange="setPayrollMonth(this.value)">
       <label class="inline-check"><input id="generateNisForms" type="checkbox" checked> NIS forms</label>
       <button class="btn primary" onclick="runPayroll()">Run payroll</button>
     </div>
@@ -783,6 +861,7 @@ function employeeTable(rows) {
 function employeesView() {
   state ||= emptyLocalState();
   const employee = editing || defaultEmployee;
+  const adjustments = employeeAdjustments(employee);
   const form = fields.map(([key, label, type]) => `
     <label>${label}
       <input id="field-${key}" type="${type}" value="${escapeHtml(employee[key] ?? "")}" ${type === "number" ? 'step="0.01"' : ""}>
@@ -801,6 +880,16 @@ function employeesView() {
       <div class="form-grid">${form}</div>
       <label style="margin-top:12px"><span><input id="field-active" type="checkbox" ${employee.active ? "checked" : ""} style="width:auto;min-height:auto"> Active employee</span></label>
       <p class="caption">Employee changes are saved to the local payroll engine. When a Firebase company is selected, the record is also mirrored to that company's Firestore employee collection.</p>
+      <div class="form-section adjustment-section">
+        <div class="panel-head">
+          <div>
+            <h2>Payroll adjustments</h2>
+            <p class="caption">One-time entries for ${escapeHtml(payrollMonth)}. They are included only when this payroll month is run.</p>
+          </div>
+          <button class="btn" onclick="addAdjustment()">Add adjustment</button>
+        </div>
+        ${adjustmentEditor(adjustments)}
+      </div>
     </section>
     <section class="panel" style="margin-top:16px">
       <div class="panel-head"><h2>Employee list</h2><span class="status neutral">${state.employees.length} records</span></div>
@@ -818,6 +907,35 @@ function employeesView() {
         `).join("")}</tbody>
       </table>
     </section>
+  `;
+}
+
+function adjustmentEditor(adjustments) {
+  if (!adjustments.length) return `<p class="caption">No adjustments for ${escapeHtml(payrollMonth)}.</p>`;
+  return `
+    <div class="table-scroll">
+      <table class="adjustment-table">
+        <thead><tr><th>Type</th><th>Label</th><th class="money">Amount</th><th>Treatment</th><th>Note</th><th></th></tr></thead>
+        <tbody>${adjustments.map((adjustment, index) => `
+          <tr data-adjustment-row="${index}">
+            <td>
+              <select id="adjustment-type-${index}" onchange="syncAdjustmentTreatment(${index})">
+                ${adjustmentTypeOptions(adjustment.type || "salary_advance_repayment")}
+              </select>
+            </td>
+            <td><input id="adjustment-label-${index}" type="text" value="${escapeHtml(adjustment.label || "")}" placeholder="${/other/i.test(adjustment.type || "") ? "Required custom label" : adjustmentTypeLabel(adjustment.type || "salary_advance_repayment")}"></td>
+            <td><input id="adjustment-amount-${index}" type="number" min="0" step="0.01" value="${Number(adjustment.amount || 0)}"></td>
+            <td>
+              <select id="adjustment-treatment-${index}">
+                ${adjustmentTreatmentOptions(adjustment.treatment || adjustmentTypeTreatment(adjustment.type || "salary_advance_repayment"))}
+              </select>
+            </td>
+            <td><input id="adjustment-note-${index}" type="text" value="${escapeHtml(adjustment.note || "")}"></td>
+            <td class="right"><button class="btn danger-btn" onclick="removeAdjustment(${index})">Remove</button></td>
+          </tr>
+        `).join("")}</tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -887,9 +1005,13 @@ function runReviewSummary(run) {
   return `
     <div class="detail-grid payroll-summary-grid">
       <div><span>Gross income</span><strong>${money(run.gross)}</strong></div>
+      <div><span>Taxable additions</span><strong>${money(run.taxable_additions)}</strong></div>
+      <div><span>Gross reductions</span><strong>${money(run.gross_reductions)}</strong></div>
       <div><span>Employee NIS</span><strong>${money(run.nis_employee)}</strong></div>
       <div><span>PAYE</span><strong>${money(run.paye)}</strong></div>
       <div><span>Health Surcharge</span><strong>${money(run.health_surcharge)}</strong></div>
+      <div><span>Other deductions</span><strong>${money(run.pre_tax_deductions + run.post_tax_deductions)}</strong></div>
+      <div><span>Reimbursements</span><strong>${money(run.non_taxable_reimbursements)}</strong></div>
       <div><span>Total deductions</span><strong>${money(run.deductions)}</strong></div>
       <div><span>Net pay</span><strong>${money(run.net)}</strong></div>
       <div><span>Employer NIS</span><strong>${money(run.nis_employer)}</strong></div>
@@ -897,6 +1019,11 @@ function runReviewSummary(run) {
       <div><span>Outputs</span><strong>${run.has_ni184 || run.has_ni187 || run.payslips.length ? "Generated" : "Not generated"}</strong></div>
     </div>
   `;
+}
+
+function adjustmentLineSummary(row) {
+  if (!row.adjustments?.length) return "";
+  return `<br><span class="caption">${row.adjustments.map((adjustment) => `${escapeHtml(adjustmentDisplayLabel(adjustment))}: ${money(adjustment.amount)} (${escapeHtml(adjustmentTreatmentLabel(adjustment.treatment))})`).join("<br>")}</span>`;
 }
 
 function runEmployeeBreakdown(run) {
@@ -908,23 +1035,27 @@ function runEmployeeBreakdown(run) {
           <tr>
             <th>Employee</th>
             <th>NIS class</th>
-            <th class="money">Gross</th>
-            <th class="money">NIS</th>
-            <th class="money">PAYE</th>
-            <th class="money">Health</th>
-            <th class="money">Total deductions</th>
+            <th class="money">Base salary</th>
+            <th class="money">Taxable additions</th>
+            <th class="money">Gross reductions</th>
+            <th class="money">Adjusted gross</th>
+            <th class="money">Statutory</th>
+            <th class="money">Other deductions</th>
+            <th class="money">Reimbursements</th>
             <th class="money">Net pay</th>
           </tr>
         </thead>
         <tbody>${run.rows.map((row) => `
           <tr>
-            <td><strong>${escapeHtml(row.fullName || row.employeeId)}</strong><br><span class="caption">${escapeHtml(row.employeeId)} ${escapeHtml(row.nisNumber || "")}</span></td>
+            <td><strong>${escapeHtml(row.fullName || row.employeeId)}</strong><br><span class="caption">${escapeHtml(row.employeeId)} ${escapeHtml(row.nisNumber || "")}</span>${adjustmentLineSummary(row)}</td>
             <td>${escapeHtml(row.nisClass || "")}</td>
-            <td class="money">${money(row.grossPay)}</td>
-            <td class="money">${money(row.nisEmployee)}</td>
-            <td class="money">${money(row.paye)}</td>
-            <td class="money">${money(row.healthSurcharge)}</td>
-            <td class="money">${money(row.totalDeductions)}</td>
+            <td class="money">${money(row.baseSalary)}</td>
+            <td class="money">${money(row.taxableAdditions)}</td>
+            <td class="money">${money(row.grossReductions)}</td>
+            <td class="money">${money(row.adjustedGross)}</td>
+            <td class="money">${money(row.statutoryDeductions)}</td>
+            <td class="money">${money(row.preTaxDeductions + row.postTaxDeductions)}</td>
+            <td class="money">${money(row.nonTaxableReimbursements)}</td>
             <td class="money"><strong>${money(row.netPay)}</strong></td>
           </tr>
         `).join("")}</tbody>
@@ -1269,6 +1400,13 @@ window.setView = function setView(view) {
   render();
 };
 
+window.setPayrollMonth = function setPayrollMonth(month) {
+  if (!/^\d{4}-\d{2}$/.test(String(month || ""))) return;
+  payrollMonth = month;
+  localStorage.setItem("payrollMonth", payrollMonth);
+  render();
+};
+
 window.editEmployee = function editEmployee(employeeId) {
   editing = { ...state.employees.find((employee) => employee.employee_id === employeeId) };
   activeView = "employees";
@@ -1280,19 +1418,103 @@ window.clearEmployeeForm = function clearEmployeeForm() {
   render();
 };
 
-window.saveEmployee = async function saveEmployee() {
-  const employee = { ...defaultEmployee };
+function currentEditingEmployee() {
+  return editing || { ...defaultEmployee, payroll_adjustments: {} };
+}
+
+function collectAdjustmentRows() {
+  return Array.from(document.querySelectorAll("[data-adjustment-row]")).map((row) => {
+    const index = row.dataset.adjustmentRow;
+    const type = document.getElementById(`adjustment-type-${index}`)?.value || "other_deduction";
+    const customLabel = document.getElementById(`adjustment-label-${index}`)?.value.trim() || "";
+    const amount = Number(document.getElementById(`adjustment-amount-${index}`)?.value || 0);
+    const treatment = document.getElementById(`adjustment-treatment-${index}`)?.value || adjustmentTypeTreatment(type);
+    const note = document.getElementById(`adjustment-note-${index}`)?.value.trim() || "";
+    return {
+      type,
+      label: customLabel || adjustmentTypeLabel(type),
+      amount,
+      treatment,
+      note,
+    };
+  }).filter((adjustment) => adjustment.amount > 0);
+}
+
+function employeeFormSnapshot(base = {}) {
+  const employee = { ...defaultEmployee, ...base };
   fields.forEach(([key, , type]) => {
-    const value = document.getElementById(`field-${key}`).value;
-    employee[key] = type === "number" ? Number(value || 0) : value;
+    const input = document.getElementById(`field-${key}`);
+    if (!input) return;
+    employee[key] = type === "number" ? Number(input.value || 0) : input.value;
   });
-  employee.active = document.getElementById("field-active").checked;
-  employee.health_surcharge_exempt = editing?.health_surcharge_exempt || "";
+  const active = document.getElementById("field-active");
+  if (active) employee.active = active.checked;
+  employee.health_surcharge_exempt = base.health_surcharge_exempt || "";
+  return employee;
+}
+
+function saveAdjustmentEditsToMemory() {
+  const employee = employeeFormSnapshot(currentEditingEmployee());
+  const payroll_adjustments = { ...(employee.payroll_adjustments || employee.payrollAdjustments || {}) };
+  const rows = collectAdjustmentRows();
+  if (rows.length) {
+    payroll_adjustments[payrollMonth] = rows;
+  } else {
+    delete payroll_adjustments[payrollMonth];
+  }
+  editing = { ...employee, payroll_adjustments };
+}
+
+window.addAdjustment = function addAdjustment() {
+  saveAdjustmentEditsToMemory();
+  const rows = employeeAdjustments(editing).slice();
+  rows.push({
+    type: "salary_advance_repayment",
+    label: "Salary advance repayment",
+    amount: 0,
+    treatment: "deduction_after_statutory",
+    note: "",
+  });
+  editing.payroll_adjustments = { ...(editing.payroll_adjustments || {}), [payrollMonth]: rows };
+  render();
+};
+
+window.removeAdjustment = function removeAdjustment(index) {
+  saveAdjustmentEditsToMemory();
+  const rows = employeeAdjustments(editing).filter((_, rowIndex) => rowIndex !== index);
+  editing.payroll_adjustments = { ...(editing.payroll_adjustments || {}), [payrollMonth]: rows };
+  if (!rows.length) delete editing.payroll_adjustments[payrollMonth];
+  render();
+};
+
+window.syncAdjustmentTreatment = function syncAdjustmentTreatment(index) {
+  const type = document.getElementById(`adjustment-type-${index}`)?.value || "";
+  const treatment = document.getElementById(`adjustment-treatment-${index}`);
+  const label = document.getElementById(`adjustment-label-${index}`);
+  if (treatment) treatment.value = adjustmentTypeTreatment(type);
+  if (label && !label.value.trim()) label.placeholder = /other/i.test(type) ? "Required custom label" : adjustmentTypeLabel(type);
+};
+
+window.saveEmployee = async function saveEmployee() {
+  const employee = employeeFormSnapshot({
+    payroll_adjustments: editing?.payroll_adjustments || editing?.payrollAdjustments || {},
+    health_surcharge_exempt: editing?.health_surcharge_exempt || "",
+  });
+  const payroll_adjustments = { ...(employee.payroll_adjustments || {}) };
+  const adjustmentRows = collectAdjustmentRows();
+  if (adjustmentRows.length) {
+    payroll_adjustments[payrollMonth] = adjustmentRows;
+  } else {
+    delete payroll_adjustments[payrollMonth];
+  }
+  employee.payroll_adjustments = payroll_adjustments;
   try {
     const payload = await api("/api/employees", { method: "POST", body: JSON.stringify(employee) });
-    state = payload.state;
     if (!localWorkspace && selectedCompanyId) {
       await saveCompanyEmployee(selectedCompanyId, employee);
+      await loadWorkspaceState();
+    } else {
+      state = payload.state;
     }
     editing = null;
     toast(`Employee ${payload.status}.`);
@@ -1324,6 +1546,8 @@ window.runPayroll = async function runPayroll() {
   const month = document.getElementById("runMonth").value;
   const generateNisForms = document.getElementById("generateNisForms").checked;
   if (!month) return toast("Choose a payroll month.");
+  payrollMonth = month;
+  localStorage.setItem("payrollMonth", payrollMonth);
   try {
     toast(`Running payroll for ${month}${generateNisForms ? " with NIS forms" : ""}...`);
     let payload;

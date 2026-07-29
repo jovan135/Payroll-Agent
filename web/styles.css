@@ -475,11 +475,25 @@ th {
 }
 
 .review-table {
-  min-width: 920px;
+  min-width: 1180px;
 }
 
 .run-output-row {
   margin-top: 12px;
+}
+
+.adjustment-section {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.adjustment-table {
+  min-width: 980px;
+}
+
+.adjustment-table select,
+.adjustment-table input {
+  min-height: 34px;
 }
 
 .form-section {
