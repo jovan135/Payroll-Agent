@@ -862,6 +862,7 @@ function employeesView() {
   state ||= emptyLocalState();
   const employee = editing || defaultEmployee;
   const adjustments = employeeAdjustments(employee);
+  const canSaveEmployee = !backendUnavailable || (!localWorkspace && selectedCompanyId);
   const form = fields.map(([key, label, type]) => `
     <label>${label}
       <input id="field-${key}" type="${type}" value="${escapeHtml(employee[key] ?? "")}" ${type === "number" ? 'step="0.01"' : ""}>
@@ -874,12 +875,12 @@ function employeesView() {
         <h2>${editing ? `Edit ${escapeHtml(editing.employee_id)}` : "Add employee"}</h2>
         <div class="actions">
           <button class="btn" onclick="clearEmployeeForm()">New</button>
-          <button class="btn primary" onclick="saveEmployee()" ${backendUnavailable ? "disabled" : ""}>Submit changes</button>
+          <button class="btn primary" onclick="saveEmployee()" ${canSaveEmployee ? "" : "disabled"}>Submit changes</button>
         </div>
       </div>
       <div class="form-grid">${form}</div>
       <label style="margin-top:12px"><span><input id="field-active" type="checkbox" ${employee.active ? "checked" : ""} style="width:auto;min-height:auto"> Active employee</span></label>
-      <p class="caption">Employee changes are saved to the local payroll engine. When a Firebase company is selected, the record is also mirrored to that company's Firestore employee collection.</p>
+      <p class="caption">Hosted company changes are saved to Firestore. Local workspace changes use the local payroll engine.</p>
       <div class="form-section adjustment-section">
         <div class="panel-head">
           <div>
@@ -1509,15 +1510,17 @@ window.saveEmployee = async function saveEmployee() {
   }
   employee.payroll_adjustments = payroll_adjustments;
   try {
-    const payload = await api("/api/employees", { method: "POST", body: JSON.stringify(employee) });
     if (!localWorkspace && selectedCompanyId) {
+      const status = state.employees.some((existing) => existing.employee_id === employee.employee_id) ? "updated" : "created";
       await saveCompanyEmployee(selectedCompanyId, employee);
       await loadWorkspaceState();
+      toast(`Employee ${status}.`);
     } else {
+      const payload = await api("/api/employees", { method: "POST", body: JSON.stringify(employee) });
       state = payload.state;
+      toast(`Employee ${payload.status}.`);
     }
     editing = null;
-    toast(`Employee ${payload.status}.`);
     render();
   } catch (error) {
     toast(error.message);
