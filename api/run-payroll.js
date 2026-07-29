@@ -194,16 +194,52 @@ function adjustmentLabel(adjustment) {
   return adjustment.label || adjustment.type || "Adjustment";
 }
 
-function employeeAdjustments(employee, month) {
-  const adjustments = employeeValue(employee, "payroll_adjustments", "payrollAdjustments", {});
-  const rows = Array.isArray(adjustments?.[month]) ? adjustments[month] : [];
-  return rows.map((adjustment) => ({
+function normalizeAdjustment(adjustment) {
+  return {
     type: adjustment.type || "other_deduction",
     label: adjustmentLabel(adjustment),
     amount: cents(Number(adjustment.amount || 0)),
     treatment: adjustment.treatment || "deduction_after_statutory",
+    scope: adjustment.scope === "all" ? "all" : "employee",
     note: adjustment.note || "",
-  })).filter((adjustment) => adjustment.amount > 0);
+  };
+}
+
+function monthlyAdjustments(employee, month) {
+  const adjustments = employeeValue(employee, "payroll_adjustments", "payrollAdjustments", {});
+  const rows = Array.isArray(adjustments?.[month]) ? adjustments[month] : [];
+  return rows.map(normalizeAdjustment).filter((adjustment) => adjustment.amount > 0);
+}
+
+function adjustmentSignature(adjustment) {
+  return [
+    adjustment.type,
+    adjustment.label,
+    adjustment.amount,
+    adjustment.treatment,
+    adjustment.note,
+  ].join("|");
+}
+
+function companyWideAdjustments(employees, month) {
+  const seen = new Set();
+  const rows = [];
+  for (const employee of employees) {
+    for (const adjustment of monthlyAdjustments(employee, month).filter((row) => row.scope === "all")) {
+      const key = adjustmentSignature(adjustment);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(adjustment);
+    }
+  }
+  return rows;
+}
+
+function employeeAdjustments(employee, month, globalAdjustments) {
+  return [
+    ...globalAdjustments,
+    ...monthlyAdjustments(employee, month).filter((adjustment) => adjustment.scope !== "all"),
+  ];
 }
 
 function adjustmentTotals(adjustments) {
@@ -247,7 +283,10 @@ function calculatePayroll(month, employees) {
     netPay: 0,
   };
 
-  for (const employee of employees.filter(isActive)) {
+  const activeEmployees = employees.filter(isActive);
+  const globalAdjustments = companyWideAdjustments(activeEmployees, month);
+
+  for (const employee of activeEmployees) {
     const employeeId = employeeValue(employee, "employee_id", "employeeId", "");
     const firstName = employeeValue(employee, "first_name", "firstName", "");
     const surname = employeeValue(employee, "surname", "surname", "");
@@ -257,7 +296,7 @@ function calculatePayroll(month, employees) {
     if (!nisNumber) throw new Error(`Employee ${employeeId} needs an NIS number.`);
     if (!monthlySalary || monthlySalary <= 0) throw new Error(`Employee ${employeeId} needs a positive monthly salary.`);
 
-    const adjustments = employeeAdjustments(employee, month);
+    const adjustments = employeeAdjustments(employee, month, globalAdjustments);
     const adjustmentTotal = adjustmentTotals(adjustments);
     const adjustedGross = cents(Math.max(0, monthlySalary + adjustmentTotal.taxableAdditions - adjustmentTotal.grossReductions));
     const nisRate = nisRateForAdjustedGross(adjustedGross);

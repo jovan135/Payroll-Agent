@@ -151,7 +151,7 @@ function buildPayrollCsv(run) {
       total_deductions: money(row.totalDeductions),
       net_pay: money(row.netPay),
       nis_employer: money(row.nisEmployer),
-      adjustments: (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)} (${adjustment.treatment})`).join("; "),
+      adjustments: (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)} (${adjustment.treatment}, ${adjustment.scope === "all" ? "all employees" : "this employee"})`).join("; "),
     }[header])).join(","));
   }
   return `${lines.join("\n")}\n`;
@@ -182,7 +182,7 @@ function buildPayrollSummary(run) {
     "|---|---|---:|---|---:|---:|---:|---:|---:|",
   ];
   for (const row of run.rows || []) {
-    const adjustments = (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)}`).join("<br>") || "-";
+    const adjustments = (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)} (${adjustment.scope === "all" ? "all employees" : "this employee"})`).join("<br>") || "-";
     lines.push(`| ${row.employeeId} | ${row.fullName} | ${money(row.baseSalary ?? row.grossPay)} | ${adjustments} | ${money(row.adjustedGross ?? row.grossPay)} | ${money(row.statutoryDeductions)} | ${money(Number(row.preTaxDeductions || 0) + Number(row.postTaxDeductions || 0))} | ${money(row.nonTaxableReimbursements)} | ${money(row.netPay)} |`);
   }
   return `${lines.join("\n")}\n`;
