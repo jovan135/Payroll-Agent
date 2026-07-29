@@ -727,12 +727,6 @@ function dashboard() {
   state ||= emptyLocalState();
   const activeEmployees = state.employees.filter((employee) => employee.active).length;
   const latest = state.latest_run || {};
-  const canRunHostedPayroll = !localWorkspace && selectedCompanyId;
-  const scheduleStatus = backendUnavailable && !canRunHostedPayroll ? "Offline" : state.settings.schedule_enabled ? "Enabled" : "Paused";
-  const scheduleTitle = backendUnavailable && !canRunHostedPayroll ? "Payroll engine status" : "Next scheduled run";
-  const scheduleNote = backendUnavailable && !canRunHostedPayroll
-    ? "Hosted payroll generation is not connected yet. Employee records are online, but payroll runs must still be generated from the local payroll engine until the hosted backend is added."
-    : state.settings.last_note;
   const alerts = state.alerts.map((alert) => `
     <div>
       <strong>${escapeHtml(alert.title)}</strong>
@@ -748,21 +742,10 @@ function dashboard() {
       ${metric("Latest deductions", money(latest.deductions))}
       ${metric("NIS forms", latest.has_ni184 && latest.has_ni187 ? "Ready" : "Pending")}
     </div>
-    <div class="grid two-col" style="margin-top:16px">
-      <section class="panel">
-        <div class="panel-head"><h2>Pending changes</h2><span class="status ${state.alerts.length ? "warning" : "success"}">${state.alerts.length ? "Review" : "Clear"}</span></div>
-        ${alerts}
-      </section>
-      <section class="panel">
-        <div class="panel-head"><h2>${scheduleTitle}</h2><span class="status ${backendUnavailable ? "warning" : "neutral"}">${scheduleStatus}</span></div>
-        <p>${escapeHtml(scheduleNote)}</p>
-        <div class="activity">
-          <div><span>Run day</span><strong>${state.settings.scheduled_day}</strong></div>
-          <div><span>Run time</span><strong>${state.settings.scheduled_time}</strong></div>
-          <div><span>Reminder window</span><strong>${state.settings.reminder_days_before} days</strong></div>
-        </div>
-      </section>
-    </div>
+    <section class="panel" style="margin-top:16px">
+      <div class="panel-head"><h2>Pending changes</h2><span class="status ${state.alerts.length ? "warning" : "success"}">${state.alerts.length ? "Review" : "Clear"}</span></div>
+      ${alerts}
+    </section>
     <div class="grid two-col" style="margin-top:16px">
       <section class="panel">
         <div class="panel-head"><h2>Employees</h2><button class="btn" onclick="setView('employees')">Manage</button></div>
