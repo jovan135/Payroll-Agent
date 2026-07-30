@@ -187,6 +187,7 @@ let state = null;
 let activeView = "dashboard";
 let editing = null;
 let employeeEditorOpen = false;
+let adjustmentEditorRows = null;
 let payrollMonth = localStorage.getItem("payrollMonth") || latestMonth();
 let loadingMessage = "Connecting to Payroll Agent...";
 let backendUnavailable = false;
@@ -268,21 +269,26 @@ function companyWideAdjustments(month = payrollMonth) {
   return rows;
 }
 
-function visibleEmployeeAdjustments(employee, month = payrollMonth, preferEmployeeRows = false) {
-  const employeeRows = employeeAdjustments(employee, month);
-  const ownRows = employeeRows.filter((adjustment) => adjustment.scope !== "all");
-  const sharedRows = preferEmployeeRows
-    ? employeeRows.filter((row) => row.scope === "all")
-    : [...companyWideAdjustments(month), ...employeeRows.filter((row) => row.scope === "all")];
-  const globalRows = [];
-  const seen = new Set();
-  for (const adjustment of sharedRows) {
-    const key = adjustmentSignature(adjustment);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    globalRows.push({ ...adjustment, scope: "all" });
+function payrollAdjustmentRowsForEditor(month = payrollMonth) {
+  const rows = companyWideAdjustments(month).map((adjustment) => ({
+    ...adjustment,
+    targetEmployeeId: "all",
+    scope: "all",
+  }));
+  for (const employee of state?.employees || []) {
+    for (const adjustment of employeeAdjustments(employee, month).filter((row) => row.scope !== "all")) {
+      rows.push({
+        ...adjustment,
+        targetEmployeeId: employee.employee_id,
+        scope: "employee",
+      });
+    }
   }
-  return [...globalRows, ...ownRows];
+  return rows;
+}
+
+function adjustmentRowsForEditor() {
+  return adjustmentEditorRows || payrollAdjustmentRowsForEditor();
 }
 
 function adjustmentTypeOptions(selectedType) {
@@ -297,10 +303,15 @@ function adjustmentTreatmentOptions(selectedTreatment) {
   )).join("");
 }
 
-function adjustmentScopeOptions(selectedScope) {
-  return adjustmentScopes.map(([id, label]) => (
-    `<option value="${id}" ${id === selectedScope ? "selected" : ""}>${escapeHtml(label)}</option>`
+function adjustmentTargetOptions(selectedTarget) {
+  const employeeOptions = (state?.employees || []).map((employee) => (
+    `<option value="${escapeHtml(employee.employee_id)}" ${employee.employee_id === selectedTarget ? "selected" : ""}>${escapeHtml(fullName(employee) || employee.employee_id)}</option>`
   )).join("");
+  return `
+    <option value="" ${selectedTarget ? "" : "selected"} disabled>Choose employee</option>
+    <option value="all" ${selectedTarget === "all" ? "selected" : ""}>All employees</option>
+    ${employeeOptions}
+  `;
 }
 
 function adjustmentDisplayLabel(adjustment) {
@@ -920,8 +931,9 @@ function employeesView() {
   state ||= emptyLocalState();
   const employee = editing || defaultEmployee;
   const formOpen = employeeEditorOpen || Boolean(editing);
-  const adjustments = visibleEmployeeAdjustments(employee, payrollMonth, Boolean(editing));
   const canSaveEmployee = !backendUnavailable || (!localWorkspace && selectedCompanyId);
+  const canSaveAdjustments = Boolean(state.employees.length) && (!backendUnavailable || (!localWorkspace && selectedCompanyId));
+  const adjustments = adjustmentRowsForEditor();
   const form = fields.map(([key, label, type]) => `
     <label>${label}
       <input id="field-${key}" type="${type}" value="${escapeHtml(employee[key] ?? "")}" ${type === "number" ? 'step="0.01"' : ""}>
@@ -966,17 +978,20 @@ function employeesView() {
         <label style="margin-top:12px"><span><input id="field-active" type="checkbox" ${employee.active ? "checked" : ""} style="width:auto;min-height:auto"> Active employee</span></label>
         <p class="caption">Hosted company changes are saved to Firestore. Local workspace changes use the local payroll engine.</p>
       </section>
-      <section class="panel payroll-adjustments-panel">
-        <div class="panel-head">
-          <div>
-            <h2>Payroll adjustments</h2>
-            <p class="caption">One-time entries for ${escapeHtml(payrollMonth)}. They are included only when this payroll month is run.</p>
-          </div>
-          <button class="btn" onclick="addAdjustment()">Add adjustment</button>
-        </div>
-        ${adjustmentEditor(adjustments)}
-      </section>
     ` : ""}
+    <section class="panel payroll-adjustments-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Payroll adjustments</h2>
+          <p class="caption">One-time entries for ${escapeHtml(payrollMonth)}. They can apply to all employees or a selected employee.</p>
+        </div>
+        <div class="actions">
+          <button class="btn" onclick="addAdjustment()" ${state.employees.length ? "" : "disabled"}>Add adjustment</button>
+          <button class="btn primary" onclick="savePayrollAdjustments()" ${canSaveAdjustments ? "" : "disabled"}>Save adjustments</button>
+        </div>
+      </div>
+      ${adjustmentEditor(adjustments)}
+    </section>
   `;
 }
 
@@ -994,8 +1009,8 @@ function adjustmentEditor(adjustments) {
               </select>
             </td>
             <td>
-              <select id="adjustment-scope-${index}">
-                ${adjustmentScopeOptions(adjustment.scope || "employee")}
+              <select id="adjustment-target-${index}">
+                ${adjustmentTargetOptions(adjustment.targetEmployeeId || (adjustment.scope === "all" ? "all" : ""))}
               </select>
             </td>
             <td><input id="adjustment-label-${index}" type="text" value="${escapeHtml(adjustmentDisplayLabel(adjustment))}" placeholder="${/other/i.test(adjustment.type || "") ? "Required custom label" : adjustmentTypeLabel(adjustment.type || "salary_advance_repayment")}"></td>
@@ -1450,6 +1465,7 @@ window.openLocalWorkspace = async function openLocalWorkspace() {
   selectedCompanyId = "";
   selectedAdminCompany = null;
   authIntent = "login";
+  adjustmentEditorRows = null;
   localStorage.setItem("localWorkspace", "true");
   localStorage.removeItem("selectedCompanyId");
   localStorage.setItem("authIntent", authIntent);
@@ -1466,6 +1482,7 @@ window.selectCompany = async function selectCompany(companyId) {
   selectedCompanyId = companyId;
   selectedAdminCompany = null;
   authIntent = "login";
+  adjustmentEditorRows = null;
   localStorage.setItem("selectedCompanyId", companyId);
   localStorage.removeItem("localWorkspace");
   localStorage.setItem("authIntent", authIntent);
@@ -1482,6 +1499,7 @@ window.setView = function setView(view) {
 window.setPayrollMonth = function setPayrollMonth(month) {
   if (!/^\d{4}-\d{2}$/.test(String(month || ""))) return;
   payrollMonth = month;
+  adjustmentEditorRows = null;
   localStorage.setItem("payrollMonth", payrollMonth);
   render();
 };
@@ -1506,15 +1524,12 @@ window.clearEmployeeForm = function clearEmployeeForm() {
   render();
 };
 
-function currentEditingEmployee() {
-  return editing || { ...defaultEmployee, payroll_adjustments: {} };
-}
-
 function collectAdjustmentRows() {
   return Array.from(document.querySelectorAll("[data-adjustment-row]")).map((row) => {
     const index = row.dataset.adjustmentRow;
     const type = document.getElementById(`adjustment-type-${index}`)?.value || "other_deduction";
-    const scope = document.getElementById(`adjustment-scope-${index}`)?.value || "employee";
+    const targetEmployeeId = document.getElementById(`adjustment-target-${index}`)?.value || "";
+    const scope = targetEmployeeId === "all" ? "all" : "employee";
     const customLabel = document.getElementById(`adjustment-label-${index}`)?.value.trim() || "";
     const amount = Number(document.getElementById(`adjustment-amount-${index}`)?.value || 0);
     const treatment = document.getElementById(`adjustment-treatment-${index}`)?.value || adjustmentTypeTreatment(type);
@@ -1525,6 +1540,7 @@ function collectAdjustmentRows() {
       amount,
       treatment,
       scope,
+      targetEmployeeId,
       note,
     };
   }).filter((adjustment) => adjustment.amount > 0);
@@ -1540,10 +1556,6 @@ function setEmployeeMonthAdjustments(employee, month, rows) {
   return { ...employee, payroll_adjustments };
 }
 
-function employeeRowsForMonth(employee, month) {
-  return employeeAdjustments(employee, month).filter((adjustment) => adjustment.scope !== "all");
-}
-
 function allScopedRows(rows) {
   const seen = new Set();
   const allRows = [];
@@ -1554,6 +1566,32 @@ function allScopedRows(rows) {
     allRows.push(row);
   }
   return allRows;
+}
+
+function adjustmentForStorage(adjustment, scope) {
+  return {
+    type: adjustment.type,
+    label: adjustmentDisplayLabel(adjustment),
+    amount: Number(adjustment.amount || 0),
+    treatment: adjustment.treatment,
+    scope,
+    note: adjustment.note || "",
+  };
+}
+
+function applyAdjustmentRowsToEmployees(rows) {
+  const companyRows = allScopedRows(rows).map((adjustment) => adjustmentForStorage(adjustment, "all"));
+  const rowsByEmployeeId = new Map();
+  for (const adjustment of rows.filter((row) => row.scope !== "all")) {
+    if (!rowsByEmployeeId.has(adjustment.targetEmployeeId)) rowsByEmployeeId.set(adjustment.targetEmployeeId, []);
+    rowsByEmployeeId.get(adjustment.targetEmployeeId).push(adjustmentForStorage(adjustment, "employee"));
+  }
+  return (state.employees || []).map((employee) => (
+    setEmployeeMonthAdjustments(employee, payrollMonth, [
+      ...companyRows,
+      ...(rowsByEmployeeId.get(employee.employee_id) || []),
+    ])
+  ));
 }
 
 function employeeFormSnapshot(base = {}) {
@@ -1570,31 +1608,28 @@ function employeeFormSnapshot(base = {}) {
 }
 
 function saveAdjustmentEditsToMemory() {
-  const employee = employeeFormSnapshot(currentEditingEmployee());
-  const rows = collectAdjustmentRows();
-  editing = setEmployeeMonthAdjustments(employee, payrollMonth, rows);
+  adjustmentEditorRows = collectAdjustmentRows();
 }
 
 window.addAdjustment = function addAdjustment() {
   saveAdjustmentEditsToMemory();
-  const rows = employeeAdjustments(editing).slice();
+  const rows = adjustmentRowsForEditor().slice();
   rows.push({
     type: "salary_advance_repayment",
     label: "Salary advance repayment",
     amount: 0,
     treatment: "deduction_after_statutory",
     scope: "employee",
+    targetEmployeeId: "",
     note: "",
   });
-  editing.payroll_adjustments = { ...(editing.payroll_adjustments || {}), [payrollMonth]: rows };
+  adjustmentEditorRows = rows;
   render();
 };
 
 window.removeAdjustment = function removeAdjustment(index) {
   saveAdjustmentEditsToMemory();
-  const rows = employeeAdjustments(editing).filter((_, rowIndex) => rowIndex !== index);
-  editing.payroll_adjustments = { ...(editing.payroll_adjustments || {}), [payrollMonth]: rows };
-  if (!rows.length) delete editing.payroll_adjustments[payrollMonth];
+  adjustmentEditorRows = adjustmentRowsForEditor().filter((_, rowIndex) => rowIndex !== index);
   render();
 };
 
@@ -1617,25 +1652,16 @@ window.saveEmployee = async function saveEmployee() {
     payroll_adjustments: editing?.payroll_adjustments || editing?.payrollAdjustments || {},
     health_surcharge_exempt: editing?.health_surcharge_exempt || "",
   });
-  const adjustmentRows = collectAdjustmentRows();
-  const employeeRows = adjustmentRows.filter((adjustment) => adjustment.scope !== "all");
-  const companyRows = allScopedRows(adjustmentRows);
-  const currentEmployee = setEmployeeMonthAdjustments(employee, payrollMonth, [...companyRows, ...employeeRows]);
+  const latestEmployee = (state.employees || []).find((existing) => existing.employee_id === employee.employee_id);
+  if (latestEmployee) {
+    employee.payroll_adjustments = latestEmployee.payroll_adjustments || latestEmployee.payrollAdjustments || {};
+  }
+  const currentEmployee = employee;
   try {
     if (!localWorkspace && selectedCompanyId) {
       const existingEmployees = state.employees || [];
       const status = existingEmployees.some((existing) => existing.employee_id === currentEmployee.employee_id) ? "updated" : "created";
-      const employeesToSave = existingEmployees.some((existing) => existing.employee_id === currentEmployee.employee_id)
-        ? existingEmployees.map((existing) => (
-          existing.employee_id === currentEmployee.employee_id
-            ? currentEmployee
-            : setEmployeeMonthAdjustments(existing, payrollMonth, [...companyRows, ...employeeRowsForMonth(existing, payrollMonth)])
-        ))
-        : [
-          ...existingEmployees.map((existing) => setEmployeeMonthAdjustments(existing, payrollMonth, [...companyRows, ...employeeRowsForMonth(existing, payrollMonth)])),
-          currentEmployee,
-        ];
-      await Promise.all(employeesToSave.map((employeeToSave) => saveCompanyEmployee(selectedCompanyId, employeeToSave)));
+      await saveCompanyEmployee(selectedCompanyId, currentEmployee);
       await loadWorkspaceState();
       toast(`Employee ${status}.`);
     } else {
@@ -1645,6 +1671,27 @@ window.saveEmployee = async function saveEmployee() {
     }
     editing = null;
     employeeEditorOpen = false;
+    render();
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+window.savePayrollAdjustments = async function savePayrollAdjustments() {
+  const rows = collectAdjustmentRows();
+  const employeeIds = new Set((state.employees || []).map((employee) => employee.employee_id));
+  const invalidTarget = rows.find((adjustment) => adjustment.scope !== "all" && !employeeIds.has(adjustment.targetEmployeeId));
+  if (invalidTarget) return toast("Choose an employee for each employee-specific adjustment.");
+  try {
+    const employeesToSave = applyAdjustmentRowsToEmployees(rows);
+    if (!localWorkspace && selectedCompanyId) {
+      await Promise.all(employeesToSave.map((employeeToSave) => saveCompanyEmployee(selectedCompanyId, employeeToSave)));
+      await loadWorkspaceState();
+    } else {
+      state = { ...state, employees: employeesToSave };
+    }
+    adjustmentEditorRows = null;
+    toast("Payroll adjustments saved.");
     render();
   } catch (error) {
     toast(error.message);
