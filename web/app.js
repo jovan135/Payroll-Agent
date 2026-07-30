@@ -1116,7 +1116,7 @@ function runEmployeeBreakdown(run) {
             <th class="money">Adjusted gross</th>
             <th class="money">Employee NIS</th>
             <th class="money">PAYE</th>
-            <th class="money">Health surcharge</th>
+            <th class="money">Health Surcharge</th>
             <th class="money">Other deductions</th>
             <th class="money">Reimbursements</th>
             <th class="money">Net pay</th>
