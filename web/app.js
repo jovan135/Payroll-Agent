@@ -1114,7 +1114,9 @@ function runEmployeeBreakdown(run) {
             <th class="money">Taxable additions</th>
             <th class="money">Gross reductions</th>
             <th class="money">Adjusted gross</th>
-            <th class="money">Statutory</th>
+            <th class="money">Employee NIS</th>
+            <th class="money">PAYE</th>
+            <th class="money">Health surcharge</th>
             <th class="money">Other deductions</th>
             <th class="money">Reimbursements</th>
             <th class="money">Net pay</th>
@@ -1128,7 +1130,9 @@ function runEmployeeBreakdown(run) {
             <td class="money">${money(row.taxableAdditions)}</td>
             <td class="money">${money(row.grossReductions)}</td>
             <td class="money">${money(row.adjustedGross)}</td>
-            <td class="money">${money(row.statutoryDeductions)}</td>
+            <td class="money">${money(row.nisEmployee)}</td>
+            <td class="money">${money(row.paye)}</td>
+            <td class="money">${money(row.healthSurcharge)}</td>
             <td class="money">${money(row.preTaxDeductions + row.postTaxDeductions)}</td>
             <td class="money">${money(row.nonTaxableReimbursements)}</td>
             <td class="money"><strong>${money(row.netPay)}</strong></td>

@@ -178,12 +178,12 @@ function buildPayrollSummary(run) {
     "",
     "## Employees",
     "",
-    "| Employee ID | Name | Base Salary | Adjustments | Adjusted Gross | Statutory | Other Deductions | Reimbursements | Net Pay |",
-    "|---|---|---:|---|---:|---:|---:|---:|---:|",
+    "| Employee ID | Name | Base Salary | Adjustments | Adjusted Gross | Employee NIS | PAYE | Health Surcharge | Other Deductions | Reimbursements | Net Pay |",
+    "|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
   ];
   for (const row of run.rows || []) {
     const adjustments = (row.adjustments || []).map((adjustment) => `${adjustment.label}: TTD ${money(adjustment.amount)} (${adjustment.scope === "all" ? "all employees" : "this employee"})`).join("<br>") || "-";
-    lines.push(`| ${row.employeeId} | ${row.fullName} | ${money(row.baseSalary ?? row.grossPay)} | ${adjustments} | ${money(row.adjustedGross ?? row.grossPay)} | ${money(row.statutoryDeductions)} | ${money(Number(row.preTaxDeductions || 0) + Number(row.postTaxDeductions || 0))} | ${money(row.nonTaxableReimbursements)} | ${money(row.netPay)} |`);
+    lines.push(`| ${row.employeeId} | ${row.fullName} | ${money(row.baseSalary ?? row.grossPay)} | ${adjustments} | ${money(row.adjustedGross ?? row.grossPay)} | ${money(row.nisEmployee)} | ${money(row.paye)} | ${money(row.healthSurcharge)} | ${money(Number(row.preTaxDeductions || 0) + Number(row.postTaxDeductions || 0))} | ${money(row.nonTaxableReimbursements)} | ${money(row.netPay)} |`);
   }
   return `${lines.join("\n")}\n`;
 }
