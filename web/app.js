@@ -186,6 +186,7 @@ let authIntent = localStorage.getItem("authIntent") || "login";
 let state = null;
 let activeView = "dashboard";
 let editing = null;
+let employeeEditorOpen = false;
 let payrollMonth = localStorage.getItem("payrollMonth") || latestMonth();
 let loadingMessage = "Connecting to Payroll Agent...";
 let backendUnavailable = false;
@@ -918,6 +919,7 @@ function employeeTable(rows) {
 function employeesView() {
   state ||= emptyLocalState();
   const employee = editing || defaultEmployee;
+  const formOpen = employeeEditorOpen || Boolean(editing);
   const adjustments = visibleEmployeeAdjustments(employee, payrollMonth, Boolean(editing));
   const canSaveEmployee = !backendUnavailable || (!localWorkspace && selectedCompanyId);
   const form = fields.map(([key, label, type]) => `
@@ -929,16 +931,42 @@ function employeesView() {
   return `
     <section class="panel">
       <div class="panel-head">
-        <h2>${editing ? `Edit ${escapeHtml(editing.employee_id)}` : "Add employee"}</h2>
+        <h2>Employee list</h2>
         <div class="actions">
-          <button class="btn" onclick="clearEmployeeForm()">New</button>
-          <button class="btn primary" onclick="saveEmployee()" ${canSaveEmployee ? "" : "disabled"}>Submit changes</button>
+          <span class="status neutral">${state.employees.length} records</span>
+          <button class="btn primary" onclick="startNewEmployee()">Add employee</button>
         </div>
       </div>
-      <div class="form-grid">${form}</div>
-      <label style="margin-top:12px"><span><input id="field-active" type="checkbox" ${employee.active ? "checked" : ""} style="width:auto;min-height:auto"> Active employee</span></label>
-      <p class="caption">Hosted company changes are saved to Firestore. Local workspace changes use the local payroll engine.</p>
-      <div class="form-section adjustment-section">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>ID</th><th>Name</th><th>NIS</th><th>BIR</th><th class="money">Salary</th><th></th></tr></thead>
+          <tbody>${state.employees.map((employee) => `
+            <tr>
+              <td>${escapeHtml(employee.employee_id)}</td>
+              <td>${escapeHtml(fullName(employee))}</td>
+              <td>${escapeHtml(employee.nis_number || "")}</td>
+              <td>${escapeHtml(employee.bir_number || "")}</td>
+              <td class="money">${money(employee.monthly_salary)}</td>
+              <td class="right"><button class="btn" onclick="editEmployee('${escapeHtml(employee.employee_id)}')">Edit</button></td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      </div>
+    </section>
+    ${formOpen ? `
+      <section class="panel employee-editor-panel">
+        <div class="panel-head">
+          <h2>${editing ? `Edit ${escapeHtml(editing.employee_id)}` : "New employee"}</h2>
+          <div class="actions">
+            <button class="btn" onclick="clearEmployeeForm()">Cancel</button>
+            <button class="btn primary" onclick="saveEmployee()" ${canSaveEmployee ? "" : "disabled"}>Submit</button>
+          </div>
+        </div>
+        <div class="form-grid">${form}</div>
+        <label style="margin-top:12px"><span><input id="field-active" type="checkbox" ${employee.active ? "checked" : ""} style="width:auto;min-height:auto"> Active employee</span></label>
+        <p class="caption">Hosted company changes are saved to Firestore. Local workspace changes use the local payroll engine.</p>
+      </section>
+      <section class="panel payroll-adjustments-panel">
         <div class="panel-head">
           <div>
             <h2>Payroll adjustments</h2>
@@ -947,24 +975,8 @@ function employeesView() {
           <button class="btn" onclick="addAdjustment()">Add adjustment</button>
         </div>
         ${adjustmentEditor(adjustments)}
-      </div>
-    </section>
-    <section class="panel" style="margin-top:16px">
-      <div class="panel-head"><h2>Employee list</h2><span class="status neutral">${state.employees.length} records</span></div>
-      <table>
-        <thead><tr><th>ID</th><th>Name</th><th>NIS</th><th>BIR</th><th class="money">Salary</th><th></th></tr></thead>
-        <tbody>${state.employees.map((employee) => `
-          <tr>
-            <td>${escapeHtml(employee.employee_id)}</td>
-            <td>${escapeHtml(fullName(employee))}</td>
-            <td>${escapeHtml(employee.nis_number || "")}</td>
-            <td>${escapeHtml(employee.bir_number || "")}</td>
-            <td class="money">${money(employee.monthly_salary)}</td>
-            <td class="right"><button class="btn" onclick="editEmployee('${escapeHtml(employee.employee_id)}')">Edit</button></td>
-          </tr>
-        `).join("")}</tbody>
-      </table>
-    </section>
+      </section>
+    ` : ""}
   `;
 }
 
@@ -1472,12 +1484,21 @@ window.setPayrollMonth = function setPayrollMonth(month) {
 
 window.editEmployee = function editEmployee(employeeId) {
   editing = { ...state.employees.find((employee) => employee.employee_id === employeeId) };
+  employeeEditorOpen = true;
+  activeView = "employees";
+  render();
+};
+
+window.startNewEmployee = function startNewEmployee() {
+  editing = null;
+  employeeEditorOpen = true;
   activeView = "employees";
   render();
 };
 
 window.clearEmployeeForm = function clearEmployeeForm() {
   editing = null;
+  employeeEditorOpen = false;
   render();
 };
 
@@ -1619,6 +1640,7 @@ window.saveEmployee = async function saveEmployee() {
       toast(`Employee ${payload.status}.`);
     }
     editing = null;
+    employeeEditorOpen = false;
     render();
   } catch (error) {
     toast(error.message);

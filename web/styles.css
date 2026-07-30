@@ -482,9 +482,9 @@ th {
   margin-top: 12px;
 }
 
-.adjustment-section {
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
+.employee-editor-panel,
+.payroll-adjustments-panel {
+  margin-top: 16px;
 }
 
 .adjustment-table {
