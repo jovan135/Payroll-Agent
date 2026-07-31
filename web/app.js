@@ -382,6 +382,20 @@ function normalizeRun(run) {
   };
 }
 
+function mergeRunIntoState(run) {
+  if (!run) return;
+  const normalizedRun = normalizeRun(run);
+  const runs = [
+    normalizedRun,
+    ...(state?.runs || []).filter((existingRun) => existingRun.month !== normalizedRun.month),
+  ].sort((a, b) => String(b.month).localeCompare(String(a.month)));
+  state = {
+    ...(state || emptyLocalState()),
+    runs,
+    latest_run: runs[0] || normalizedRun,
+  };
+}
+
 function latestMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -504,7 +518,12 @@ async function api(path, options = {}) {
     throw new Error(`Expected JSON from ${path}`);
   }
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "Request failed");
+  if (!response.ok) {
+    const error = new Error(payload.error || "Request failed");
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
   return payload;
 }
 
@@ -1723,11 +1742,17 @@ window.runPayroll = async function runPayroll() {
   payrollMonth = month;
   localStorage.setItem("payrollMonth", payrollMonth);
   try {
+    const existingRun = (state?.runs || []).find((run) => run.month === month);
+    let overwriteApproved = false;
+    if (!localWorkspace && selectedCompanyId && existingRun?.status === "approved") {
+      overwriteApproved = window.confirm(`Payroll for ${month} has already been approved. Running payroll again will replace the approved payroll with a new draft and previously generated outputs for that month. Continue?`);
+      if (!overwriteApproved) return toast(`Kept approved payroll for ${month}.`);
+    }
     toast(`Running payroll for ${month}${generateNisForms ? " with NIS forms" : ""}...`);
     let payload;
     if (!localWorkspace && selectedCompanyId) {
       const token = await getAuthToken();
-      payload = await api("/api/run-payroll", {
+      const runHostedPayroll = (confirmedOverwrite = false) => api("/api/run-payroll", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -1737,9 +1762,19 @@ window.runPayroll = async function runPayroll() {
           month,
           companyId: selectedCompanyId,
           generate_nis_forms: generateNisForms,
+          overwrite_approved: confirmedOverwrite,
         }),
       });
+      try {
+        payload = await runHostedPayroll(overwriteApproved);
+      } catch (error) {
+        if (error.status !== 409 || error.payload?.code !== "approved_run_exists") throw error;
+        const confirmed = window.confirm(`Payroll for ${month} is already approved. Running payroll again will replace the approved payroll with a new draft and previously generated outputs for that month. Continue?`);
+        if (!confirmed) return toast(`Kept approved payroll for ${month}.`);
+        payload = await runHostedPayroll(true);
+      }
       await loadWorkspaceState();
+      mergeRunIntoState(payload.run);
     } else {
       payload = await api("/api/run-payroll", {
         method: "POST",

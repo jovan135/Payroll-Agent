@@ -387,6 +387,25 @@ module.exports = async function handler(request, response) {
       sendJson(response, 400, { error: "month must be in YYYY-MM format." });
       return;
     }
+    const overwriteApproved = Boolean(body.overwriteApproved || body.overwrite_approved);
+    let existingRun = null;
+    try {
+      const existingRunDoc = await firestoreFetch(
+        `companies/${encodeURIComponent(companyId)}/payrollRuns/${encodeURIComponent(month)}`,
+        token,
+      );
+      existingRun = fromFirestoreFields(existingRunDoc.fields || {});
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+    if (existingRun?.status === "approved" && !overwriteApproved) {
+      sendJson(response, 409, {
+        code: "approved_run_exists",
+        error: `Payroll for ${month} is already approved. Confirm before replacing it with a new draft.`,
+        run: existingRun,
+      });
+      return;
+    }
 
     const companyDoc = await firestoreFetch(`companies/${encodeURIComponent(companyId)}`, token);
     const company = fromFirestoreFields(companyDoc.fields || {});
