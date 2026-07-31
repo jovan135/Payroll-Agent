@@ -23,6 +23,7 @@ const companyNavItems = [
   ["employees", "Employees"],
   ["runs", "Payroll Runs"],
   ["payslips", "Payslips"],
+  ["nibForms", "NIB Forms"],
   ["reports", "Reports"],
   ["settings", "Settings"],
 ];
@@ -869,6 +870,7 @@ function titleFor(id) {
     employees: "Employees",
     runs: "Payroll Runs",
     payslips: "Payslips",
+    nibForms: "NIB Forms",
     reports: "Reports",
     settings: "Settings",
     admin: "Administrator",
@@ -882,6 +884,7 @@ function subtitleFor(id) {
     employees: "Add and maintain employee records used by NIS, PAYE, Health Surcharge, and payslips.",
     runs: "Review draft payroll totals before approving final payroll files.",
     payslips: "Open generated payslips grouped by employee.",
+    nibForms: "Open generated NI184 and NI187 forms by payroll month.",
     reports: "Compare gross pay, deductions, net pay, and employer costs.",
     settings: "Control reminder timing and scheduled payroll preferences.",
     admin: "Approve company signups and monitor account onboarding.",
@@ -1241,6 +1244,70 @@ function payslipsView() {
   `;
 }
 
+function nibFormFiles(run) {
+  return [
+    {
+      key: "ni184Html",
+      label: "NI184",
+      description: "Employee contribution return",
+      fileName: `NI184-${run.month}.html`,
+      available: Boolean(run.outputs?.ni184Html),
+    },
+    {
+      key: "ni187Html",
+      label: "NI187",
+      description: "Employee/employer contribution schedule",
+      fileName: `NI187-${run.month}.html`,
+      available: Boolean(run.outputs?.ni187Html),
+    },
+  ];
+}
+
+function nibFormsView() {
+  state ||= emptyLocalState();
+  const runsWithForms = state.runs.filter((run) => (
+    run.outputs?.ni184Html || run.outputs?.ni187Html || run.has_ni184 || run.has_ni187
+  ));
+  const generatedCount = state.runs.reduce((total, run) => (
+    total + nibFormFiles(run).filter((form) => form.available).length
+  ), 0);
+  return `
+    <section class="panel">
+      <div class="panel-head"><h2>NIB forms by month</h2><span class="status neutral">${generatedCount} files</span></div>
+      ${runsWithForms.map((run) => `
+        <div class="nib-form-group">
+          <div class="nib-form-head">
+            <div>
+              <strong>${escapeHtml(run.month)}</strong><br>
+              <span class="caption">${run.employees} employee(s), ${runStatusLabel(run)} payroll, ${run.monday_count || "-"} NIS week${run.monday_count === 1 ? "" : "s"}</span>
+            </div>
+            <div class="nib-form-totals">
+              <span><strong>${money(run.nis_employee)}</strong><br><span class="caption">Employee NIS</span></span>
+              <span><strong>${money(run.nis_employer)}</strong><br><span class="caption">Employer NIS</span></span>
+            </div>
+          </div>
+          <div class="activity nib-form-list">
+            ${nibFormFiles(run).map((form) => form.available ? `
+              <div class="nib-form-row">
+                <span><strong>${form.label}</strong><br><span class="caption">${form.description}</span></span>
+                <span class="form-links">
+                  <button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', 'html')">Open</button>
+                  <button class="mini-link" onclick="downloadPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', '${escapeHtml(form.fileName)}', 'text/html')">Download</button>
+                </span>
+              </div>
+            ` : `
+              <div class="nib-form-row muted-row">
+                <span><strong>${form.label}</strong><br><span class="caption">${form.description}</span></span>
+                <span class="status neutral">Pending</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `).join("") || "<p>No NIB forms generated yet.</p>"}
+    </section>
+  `;
+}
+
 function reportsView() {
   state ||= emptyLocalState();
   return `
@@ -1391,6 +1458,7 @@ function render() {
     employees: employeesView,
     runs: runsView,
     payslips: payslipsView,
+    nibForms: nibFormsView,
     reports: reportsView,
     settings: settingsView,
     admin: adminView,

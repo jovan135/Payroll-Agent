@@ -580,6 +580,50 @@ select {
   margin-bottom: 4px;
 }
 
+.nib-form-group {
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+}
+
+.nib-form-group:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.nib-form-head,
+.nib-form-row,
+.nib-form-totals {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.nib-form-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.nib-form-totals {
+  text-align: right;
+}
+
+.nib-form-list {
+  gap: 6px;
+}
+
+.nib-form-row {
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.nib-form-row.muted-row {
+  color: var(--muted);
+}
+
 .mini-link {
   display: inline-flex;
   align-items: center;
@@ -695,5 +739,20 @@ select {
 
   .actions input[type="month"] {
     flex: 1 1 180px;
+  }
+
+  .nib-form-head,
+  .nib-form-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nib-form-totals {
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .nib-form-row .form-links {
+    justify-content: flex-start;
   }
 }
