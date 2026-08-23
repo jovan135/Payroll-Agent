@@ -695,14 +695,127 @@ function escapeHtml(value) {
 
 function renderLogin() {
   return `
-    <main class="auth-page">
-      <section class="auth-card wide">
-        <div class="brand-mark">PA</div>
-        <h1>Payroll Agent</h1>
-        <p>Access an existing payroll workspace, or create a new company profile for approval.</p>
-        <div class="actions auth-actions">
-          <button class="btn primary" onclick="signIn('login')">Log in with Google</button>
-          <button class="btn" onclick="signIn('signup')">Sign up company</button>
+    <main class="landing-page">
+      <header class="landing-nav">
+        <div class="landing-brand">
+          <div class="brand-mark">PA</div>
+          <div>
+            <strong>Payroll Agent</strong>
+            <span>Payroll tools for T&T employers</span>
+          </div>
+        </div>
+        <div class="landing-nav-actions">
+          <button class="btn" onclick="signIn('login')">Log in</button>
+          <button class="btn primary" onclick="signIn('signup')">Sign up company</button>
+        </div>
+      </header>
+
+      <section class="landing-hero">
+        <div class="hero-copy">
+          <span class="eyebrow">Payroll, payslips, and NIS readiness</span>
+          <h1>Run monthly payroll with fewer spreadsheets and cleaner records.</h1>
+          <p>
+            Payroll Agent helps small businesses keep employee records, calculate payroll deductions,
+            prepare payslips, and organize monthly NIS work from one secure company workspace.
+          </p>
+          <div class="landing-actions">
+            <button class="btn primary large" onclick="signIn('signup')">Sign up company</button>
+            <button class="btn large" onclick="signIn('login')">Log in</button>
+          </div>
+          <div class="requirement-strip">
+            <span>To sign up you need:</span>
+            <strong>Gmail account</strong>
+            <strong>Business NIS Number</strong>
+          </div>
+        </div>
+
+        <aside class="product-preview" aria-label="Payroll Agent dashboard preview">
+          <div class="preview-top">
+            <div>
+              <span>July 2026 Payroll</span>
+              <strong>The J Spa and Skin Clinic LTD</strong>
+            </div>
+            <span class="status success">Ready</span>
+          </div>
+          <div class="preview-kpis">
+            <div><span>Employees</span><strong>3</strong></div>
+            <div><span>Net pay</span><strong>TTD 12,476.10</strong></div>
+            <div><span>NIS forms</span><strong>Pending</strong></div>
+          </div>
+          <div class="preview-list">
+            <div><span>Employee records</span><strong>Updated</strong></div>
+            <div><span>PAYE and Health Surcharge</span><strong>Calculated</strong></div>
+            <div><span>Payslips</span><strong>Grouped by employee</strong></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="landing-section">
+        <div class="section-intro">
+          <span class="eyebrow">Why businesses use it</span>
+          <h2>Built for monthly payroll work that needs to be accurate, repeatable, and easy to review.</h2>
+        </div>
+        <div class="benefit-grid">
+          <article>
+            <span class="benefit-icon">01</span>
+            <h3>Calculate deductions</h3>
+            <p>Bring NIS, PAYE, Health Surcharge, gross pay, deductions, and net pay into one monthly workflow.</p>
+          </article>
+          <article>
+            <span class="benefit-icon">02</span>
+            <h3>Organize employee records</h3>
+            <p>Keep employee names, NIS numbers, dates employed, salary details, and payroll history together.</p>
+          </article>
+          <article>
+            <span class="benefit-icon">03</span>
+            <h3>Prepare payroll outputs</h3>
+            <p>Generate payroll summaries, payslips, and NIS form data without rebuilding spreadsheets every month.</p>
+          </article>
+          <article>
+            <span class="benefit-icon">04</span>
+            <h3>Work by company</h3>
+            <p>Each approved business gets its own workspace, company profile, employees, payroll runs, and reports.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-section split-section">
+        <div>
+          <span class="eyebrow">How signup works</span>
+          <h2>Start with your Google account and Business NIS Number.</h2>
+          <p>
+            New businesses submit a company profile for approval. Once approved, the company workspace is ready
+            for employees, monthly payroll runs, payslips, reports, and NIS preparation.
+          </p>
+        </div>
+        <div class="steps">
+          <div><strong>1</strong><span>Sign in using Gmail</span></div>
+          <div><strong>2</strong><span>Enter company details and Business NIS Number</span></div>
+          <div><strong>3</strong><span>Add employees and run monthly payroll</span></div>
+        </div>
+      </section>
+
+      <section class="landing-section trust-section">
+        <div>
+          <span class="eyebrow">Designed for small employers</span>
+          <h2>A professional payroll workspace without the clutter.</h2>
+        </div>
+        <div class="trust-grid">
+          <span>Google sign-in</span>
+          <span>Company-specific workspaces</span>
+          <span>Admin-approved onboarding</span>
+          <span>Payroll run history</span>
+          <span>Employee payslip access</span>
+          <span>NIS form preparation</span>
+        </div>
+      </section>
+
+      <section class="landing-cta">
+        <h2>Ready to set up your company payroll workspace?</h2>
+        <p>Use your Gmail account and Business NIS Number to request access.</p>
+        <div class="landing-actions center">
+          <button class="btn primary large" onclick="signIn('signup')">Sign up company</button>
+          <button class="btn large" onclick="signIn('login')">Log in</button>
         </div>
       </section>
     </main>
