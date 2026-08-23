@@ -716,7 +716,8 @@ function renderLogin() {
           <h1>Run monthly payroll with fewer spreadsheets and cleaner records.</h1>
           <p>
             Payroll Agent helps small businesses keep employee records, calculate payroll deductions,
-            prepare payslips, and organize monthly NIS work from one secure company workspace.
+            prepare payslips, and automatically fill out the NI184 and NI187 forms so they are ready
+            to print and sign.
           </p>
           <div class="landing-actions">
             <button class="btn primary large" onclick="signIn('signup')">Sign up company</button>
@@ -740,14 +741,36 @@ function renderLogin() {
           <div class="preview-kpis">
             <div><span>Employees</span><strong>3</strong></div>
             <div><span>Net pay</span><strong>TTD 12,476.10</strong></div>
-            <div><span>NIS forms</span><strong>Pending</strong></div>
+            <div><span>NIB forms</span><strong>Ready to print</strong></div>
           </div>
           <div class="preview-list">
             <div><span>Employee records</span><strong>Updated</strong></div>
             <div><span>PAYE and Health Surcharge</span><strong>Calculated</strong></div>
-            <div><span>Payslips</span><strong>Grouped by employee</strong></div>
+            <div><span>NI184 and NI187</span><strong>Filled automatically</strong></div>
           </div>
         </aside>
+      </section>
+
+      <section class="nib-highlight">
+        <div>
+          <span class="eyebrow">Signature-ready NIB forms</span>
+          <h2>Automatically prepare NI184 and NI187 forms each month.</h2>
+          <p>
+            Payroll Agent uses your company profile, employee records, and monthly payroll run to fill
+            the two National Insurance Board forms for you. Review them, print them, sign them, and keep
+            your payroll file moving without manually typing the same information again.
+          </p>
+        </div>
+        <div class="nib-form-stack" aria-label="NIB forms preview">
+          <div>
+            <strong>NI184</strong>
+            <span>Monthly contribution summary</span>
+          </div>
+          <div>
+            <strong>NI187</strong>
+            <span>Employee contribution details</span>
+          </div>
+        </div>
       </section>
 
       <section class="landing-section">
@@ -768,8 +791,8 @@ function renderLogin() {
           </article>
           <article>
             <span class="benefit-icon">03</span>
-            <h3>Prepare payroll outputs</h3>
-            <p>Generate payroll summaries, payslips, and NIS form data without rebuilding spreadsheets every month.</p>
+            <h3>Fill NIB forms automatically</h3>
+            <p>Prepare NI184 and NI187 forms from the monthly payroll run so they are ready to print and sign.</p>
           </article>
           <article>
             <span class="benefit-icon">04</span>
@@ -806,7 +829,7 @@ function renderLogin() {
           <span>Admin-approved onboarding</span>
           <span>Payroll run history</span>
           <span>Employee payslip access</span>
-          <span>NIS form preparation</span>
+          <span>NI184 and NI187 form preparation</span>
         </div>
       </section>
 
