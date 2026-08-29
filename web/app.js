@@ -1691,7 +1691,7 @@ window.signIn = async function signIn(intent = "login") {
     }
     loadingMessage = "Opening Google sign-in...";
     renderLoading();
-    const useRedirect = window.location.hostname === "payroll-agent-ten.vercel.app";
+    const useRedirect = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
     if (useRedirect) {
       sessionStorage.setItem("authRedirectPending", "true");
       await signInWithGoogle({ promptSelectAccount: true, redirect: true });

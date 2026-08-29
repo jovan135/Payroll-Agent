@@ -1,7 +1,8 @@
 const defaultAuthDomain = "payroll-application-f6d25.firebaseapp.com";
-const hostedAuthDomain = "payroll-agent-ten.vercel.app";
 const hostname = window.location.hostname;
-const authDomain = hostname === hostedAuthDomain ? hostedAuthDomain : defaultAuthDomain;
+const authDomain = hostname === "localhost" || hostname === "127.0.0.1"
+  ? defaultAuthDomain
+  : hostname;
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBylmaNc1dq6Cx9UK6zj-N7AF6dXxIIvhk",
