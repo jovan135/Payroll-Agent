@@ -713,7 +713,7 @@ function renderLogin() {
       <section class="landing-hero">
         <div class="hero-copy">
           <span class="eyebrow">Payroll, payslips, and NIS readiness</span>
-          <h1>Run monthly payroll with fewer spreadsheets and cleaner records.</h1>
+          <h1>Run monthly payroll, generate complete payslips, and get automatically filled out NIB forms.</h1>
           <p>
             Payroll Agent helps small businesses keep employee records, calculate payroll deductions,
             prepare payslips, and automatically fill out the NI184 and NI187 forms so they are ready
