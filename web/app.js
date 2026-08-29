@@ -751,95 +751,16 @@ function renderLogin() {
         </aside>
       </section>
 
-      <section class="nib-highlight">
-        <div>
-          <span class="eyebrow">Signature-ready NIB forms</span>
-          <h2>Automatically prepare NI184 and NI187 forms each month.</h2>
-          <p>
-            Payroll Agent uses your company profile, employee records, and monthly payroll run to fill
-            the two National Insurance Board forms for you. Review them, print them, sign them, and keep
-            your payroll file moving without manually typing the same information again.
-          </p>
+      <section class="landing-section compact-section">
+        <div class="steps compact-steps" aria-label="How Payroll Agent works">
+          <div><strong>1</strong><span>Add company details</span></div>
+          <div><strong>2</strong><span>Add employees</span></div>
+          <div><strong>3</strong><span>Run payroll</span></div>
+          <div><strong>4</strong><span>Print payslips and NIB forms</span></div>
         </div>
-        <div class="nib-form-stack" aria-label="NIB forms preview">
-          <div>
-            <strong>NI184</strong>
-            <span>Monthly contribution summary</span>
-          </div>
-          <div>
-            <strong>NI187</strong>
-            <span>Employee contribution details</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="landing-section">
-        <div class="section-intro">
-          <span class="eyebrow">Why businesses use it</span>
-          <h2>Built for monthly payroll work that needs to be accurate, repeatable, and easy to review.</h2>
-        </div>
-        <div class="benefit-grid">
-          <article>
-            <span class="benefit-icon">01</span>
-            <h3>Calculate deductions</h3>
-            <p>Bring NIS, PAYE, Health Surcharge, gross pay, deductions, and net pay into one monthly workflow.</p>
-          </article>
-          <article>
-            <span class="benefit-icon">02</span>
-            <h3>Organize employee records</h3>
-            <p>Keep employee names, NIS numbers, dates employed, salary details, and payroll history together.</p>
-          </article>
-          <article>
-            <span class="benefit-icon">03</span>
-            <h3>Fill NIB forms automatically</h3>
-            <p>Prepare NI184 and NI187 forms from the monthly payroll run so they are ready to print and sign.</p>
-          </article>
-          <article>
-            <span class="benefit-icon">04</span>
-            <h3>Work by company</h3>
-            <p>Each approved business gets its own workspace, company profile, employees, payroll runs, and reports.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="landing-section split-section">
-        <div>
-          <span class="eyebrow">How signup works</span>
-          <h2>Start with your Google account and Business NIS Number.</h2>
-          <p>
-            New businesses submit a company profile for approval. Once approved, the company workspace is ready
-            for employees, monthly payroll runs, payslips, reports, and NIS preparation.
-          </p>
-        </div>
-        <div class="steps">
-          <div><strong>1</strong><span>Sign in using Gmail</span></div>
-          <div><strong>2</strong><span>Enter company details and Business NIS Number</span></div>
-          <div><strong>3</strong><span>Add employees and run monthly payroll</span></div>
-        </div>
-      </section>
-
-      <section class="landing-section trust-section">
-        <div>
-          <span class="eyebrow">Designed for small employers</span>
-          <h2>A professional payroll workspace without the clutter.</h2>
-        </div>
-        <div class="trust-grid">
-          <span>Google sign-in</span>
-          <span>Company-specific workspaces</span>
-          <span>Admin-approved onboarding</span>
-          <span>Payroll run history</span>
-          <span>Employee payslip access</span>
-          <span>NI184 and NI187 form preparation</span>
-        </div>
-      </section>
-
-      <section class="landing-cta">
-        <h2>Ready to set up your company payroll workspace?</h2>
-        <p>Use your Gmail account and Business NIS Number to request access.</p>
-        <div class="landing-actions center">
-          <button class="btn primary large" onclick="signIn('signup')">Sign up company</button>
-          <button class="btn large" onclick="signIn('login')">Log in</button>
-        </div>
+        <p class="trust-line">
+          Built for T&T payroll: NIS, PAYE, Health Surcharge, NI184, and NI187.
+        </p>
       </section>
     </main>
   `;
