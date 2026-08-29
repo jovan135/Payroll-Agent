@@ -673,6 +673,19 @@ async function refreshFirebaseState() {
   }
 }
 
+async function prepareSignedInWorkspace() {
+  loadingMessage = "Loading company workspace...";
+  renderLoading();
+  await refreshFirebaseState();
+  if (authIntent === "signup") {
+    state = emptyLocalState();
+  } else if (localWorkspace || selectedCompanyId || isAdmin()) {
+    await loadWorkspaceState();
+  } else {
+    state = emptyLocalState();
+  }
+}
+
 async function bootstrap() {
   renderLoading();
   let redirectSettled = false;
@@ -707,16 +720,7 @@ async function bootstrap() {
     }, 12000);
     try {
       if (authUser) {
-        loadingMessage = "Loading company workspace...";
-        renderLoading();
-        await refreshFirebaseState();
-        if (authIntent === "signup") {
-          state = emptyLocalState();
-        } else if (localWorkspace || selectedCompanyId || isAdmin()) {
-          await loadWorkspaceState();
-        } else {
-          state = emptyLocalState();
-        }
+        await prepareSignedInWorkspace();
       }
       if (!fallbackRendered) render();
     } catch (error) {
@@ -1687,8 +1691,19 @@ window.signIn = async function signIn(intent = "login") {
     }
     loadingMessage = "Opening Google sign-in...";
     renderLoading();
-    sessionStorage.setItem("authRedirectPending", "true");
-    await signInWithGoogle({ promptSelectAccount: true, redirect: true });
+    const useRedirect = window.location.hostname === "payroll-agent-ten.vercel.app";
+    if (useRedirect) {
+      sessionStorage.setItem("authRedirectPending", "true");
+      await signInWithGoogle({ promptSelectAccount: true, redirect: true });
+      return;
+    }
+    sessionStorage.removeItem("authRedirectPending");
+    const user = await signInWithGoogle({ promptSelectAccount: true, redirect: false });
+    if (user) {
+      authUser = user;
+      await prepareSignedInWorkspace();
+      render();
+    }
   } catch (error) {
     sessionStorage.removeItem("authRedirectPending");
     render();
