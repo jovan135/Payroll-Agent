@@ -436,6 +436,64 @@ th {
   margin-bottom: 14px;
 }
 
+.billing-panel {
+  margin-top: 16px;
+}
+
+.billing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.billing-grid article {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfc;
+  padding: 18px;
+}
+
+.billing-grid article.selected {
+  border-color: rgba(0, 127, 122, 0.38);
+  background: rgba(0, 127, 122, 0.08);
+}
+
+.billing-grid h3,
+.billing-grid p {
+  margin: 0;
+}
+
+.billing-grid h3 {
+  font-size: 22px;
+}
+
+.billing-grid p {
+  color: #506270;
+  line-height: 1.5;
+}
+
+.plan-meter {
+  margin-top: 14px;
+}
+
+.paypal-test-fields {
+  margin-top: 14px;
+}
+
+.paypal-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.paypal-button-container {
+  margin-top: 12px;
+  max-width: 520px;
+}
+
 .run-review {
   border-top: 1px solid var(--line);
   padding: 18px 0 4px;

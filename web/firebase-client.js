@@ -179,6 +179,13 @@ export async function loadAdminSignupRequests() {
 
 export async function approveSignupRequest(request) {
   const companyRef = doc(collection(db, "companies"));
+  const billing = {
+    tier: "free",
+    status: "active",
+    employeeLimit: 1,
+    provider: "manual",
+    providerMode: "test",
+  };
   const company = {
     name: request.companyName,
     legalName: request.companyName,
@@ -199,11 +206,17 @@ export async function approveSignupRequest(request) {
       signatureRequiredAfterGeneration: true,
     },
     status: "active",
+    billing,
     createdFromSignupRequestId: request.id,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
   await setDoc(companyRef, company);
+  await setDoc(doc(db, "companies", companyRef.id, "billing", "current"), {
+    ...billing,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
   await setDoc(doc(db, "companies", companyRef.id, "members", request.requestedByUid), {
     uid: request.requestedByUid,
     email: request.requestedByEmail || request.contactEmail || "",
@@ -244,6 +257,29 @@ export async function saveCompanyEmployee(companyId, employee) {
 export async function saveCompanyProfile(companyId, company) {
   await setDoc(doc(db, "companies", companyId), {
     ...company,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+export async function loadCompanyBilling(companyId) {
+  const snapshot = await getDoc(doc(db, "companies", companyId, "billing", "current"));
+  return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+}
+
+export async function saveCompanyBilling(companyId, billing) {
+  await setDoc(doc(db, "companies", companyId, "billing", "current"), {
+    ...billing,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+  await setDoc(doc(db, "companies", companyId), {
+    billing: {
+      tier: billing.tier,
+      status: billing.status,
+      employeeLimit: billing.employeeLimit,
+      provider: billing.provider,
+      providerMode: billing.providerMode,
+      subscriptionId: billing.subscriptionId || "",
+    },
     updatedAt: serverTimestamp(),
   }, { merge: true });
 }

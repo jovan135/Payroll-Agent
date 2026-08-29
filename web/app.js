@@ -5,12 +5,14 @@ import {
   getAuthToken,
   listenForAuth,
   loadAdminSignupRequests,
+  loadCompanyBilling,
   loadCompanyEmployees,
   loadCompanyPayrollRuns,
   loadMemberships,
   loadMySignupRequests,
   rejectSignupRequest,
   requestCompanySignup,
+  saveCompanyBilling,
   saveCompanyEmployee,
   saveCompanyProfile,
   signInWithGoogle,
@@ -80,6 +82,21 @@ const adjustmentScopes = [
   ["employee", "This employee"],
   ["all", "All employees"],
 ];
+
+const planDefinitions = {
+  free: {
+    label: "Free",
+    employeeLimit: 1,
+    priceLabel: "TTD 0 / month",
+    description: "For testing Payroll Agent with one employee record.",
+  },
+  paid: {
+    label: "Paid",
+    employeeLimit: 5,
+    priceLabel: "Monthly PayPal plan",
+    description: "For businesses that need up to five employee records.",
+  },
+};
 
 const defaultEmployee = {
   employee_id: "",
@@ -185,6 +202,7 @@ let selectedCompanyId = localStorage.getItem("selectedCompanyId") || "";
 let localWorkspace = localStorage.getItem("localWorkspace") === "true";
 let authIntent = localStorage.getItem("authIntent") || "login";
 let state = null;
+let companyBillingById = {};
 let activeView = "dashboard";
 let editing = null;
 let employeeEditorOpen = false;
@@ -453,6 +471,57 @@ function selectedCompanyProfile() {
     } : null);
 }
 
+function defaultCompanyBilling() {
+  return {
+    tier: "free",
+    status: "active",
+    employeeLimit: planDefinitions.free.employeeLimit,
+    provider: "manual",
+    providerMode: "test",
+  };
+}
+
+function billingStorageKey(companyId = selectedCompanyId) {
+  return `billing:${companyId || "local"}`;
+}
+
+function loadLocalBilling(companyId = selectedCompanyId) {
+  try {
+    return JSON.parse(localStorage.getItem(billingStorageKey(companyId)) || "null") || defaultCompanyBilling();
+  } catch {
+    return defaultCompanyBilling();
+  }
+}
+
+function selectedCompanyBilling() {
+  if (localWorkspace || !selectedCompanyId) return loadLocalBilling("local");
+  return companyBillingById[selectedCompanyId]
+    || selectedCompanyProfile()?.billing
+    || loadLocalBilling(selectedCompanyId);
+}
+
+function selectedPlanDefinition() {
+  const billing = selectedCompanyBilling();
+  return planDefinitions[billing.tier] || planDefinitions.free;
+}
+
+function employeeLimit() {
+  const billing = selectedCompanyBilling();
+  const plan = selectedPlanDefinition();
+  return Number(billing.employeeLimit || plan.employeeLimit || planDefinitions.free.employeeLimit);
+}
+
+function employeeLimitMessage() {
+  const plan = selectedPlanDefinition();
+  return `${plan.label} plan allows up to ${employeeLimit()} employee ${employeeLimit() === 1 ? "record" : "records"}.`;
+}
+
+function wouldExceedEmployeeLimit(employee) {
+  const employees = state?.employees || [];
+  const exists = employees.some((existing) => existing.employee_id === employee.employee_id);
+  return !exists && employees.length >= employeeLimit();
+}
+
 function currentCompanyName() {
   if (localWorkspace) return "The J Spa and Skin Clinic LTD";
   return selectedMembership()?.company?.name
@@ -542,10 +611,12 @@ async function loadWorkspaceState() {
   await loadLocalState();
   if (localWorkspace || !selectedCompanyId) return;
   try {
-    const [employees, payrollRuns] = await Promise.all([
+    const [employees, payrollRuns, billing] = await Promise.all([
       withTimeout(loadCompanyEmployees(selectedCompanyId), 8000, []),
       withTimeout(loadCompanyPayrollRuns(selectedCompanyId), 8000, []),
+      withTimeout(loadCompanyBilling(selectedCompanyId), 8000, null),
     ]);
+    companyBillingById[selectedCompanyId] = billing || selectedCompanyProfile()?.billing || loadLocalBilling(selectedCompanyId);
     const runs = payrollRuns.map(normalizeRun).sort((a, b) => String(b.month).localeCompare(String(a.month)));
     state = {
       ...state,
@@ -1012,6 +1083,8 @@ function employeesView() {
   const formOpen = employeeEditorOpen || Boolean(editing);
   const canSaveEmployee = !backendUnavailable || (!localWorkspace && selectedCompanyId);
   const canSaveAdjustments = Boolean(state.employees.length) && (!backendUnavailable || (!localWorkspace && selectedCompanyId));
+  const limit = employeeLimit();
+  const atLimit = state.employees.length >= limit;
   const adjustments = adjustmentRowsForEditor();
   const form = fields.map(([key, label, type]) => `
     <label>${label}
@@ -1024,10 +1097,11 @@ function employeesView() {
       <div class="panel-head">
         <h2>Employee list</h2>
         <div class="actions">
-          <span class="status neutral">${state.employees.length} records</span>
-          <button class="btn primary" onclick="startNewEmployee()">Add employee</button>
+          <span class="status ${atLimit ? "warning" : "neutral"}">${state.employees.length} / ${limit} records</span>
+          <button class="btn primary" onclick="startNewEmployee()" ${atLimit ? "disabled" : ""}>Add employee</button>
         </div>
       </div>
+      <p class="caption">${escapeHtml(employeeLimitMessage())}</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>ID</th><th>Name</th><th>NIS</th><th>BIR</th><th class="money">Salary</th><th></th></tr></thead>
@@ -1408,6 +1482,12 @@ function settingsView() {
   const company = selectedCompanyProfile();
   const address = company?.address || {};
   const declarant = company?.declarant || {};
+  const billing = selectedCompanyBilling();
+  const plan = selectedPlanDefinition();
+  const limit = employeeLimit();
+  const currentEmployees = state.employees.length;
+  const paypalClientId = localStorage.getItem("paypalSandboxClientId") || "sb";
+  const paypalPlanId = localStorage.getItem("paypalSandboxPlanId") || "";
   return `
     ${company ? `
       <section class="panel">
@@ -1422,6 +1502,45 @@ function settingsView() {
         </div>
       </section>
     ` : ""}
+    <section class="panel billing-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Monthly plan test</h2>
+          <p class="caption">Preview-only PayPal Sandbox setup. Free allows one employee; Paid allows up to five.</p>
+        </div>
+        <span class="status ${billing.tier === "paid" ? "success" : "neutral"}">${escapeHtml(plan.label)} plan</span>
+      </div>
+      <div class="billing-grid">
+        <article class="${billing.tier === "free" ? "selected" : ""}">
+          <span class="eyebrow">Free</span>
+          <h3>1 employee</h3>
+          <p>Try Payroll Agent with one employee record, payroll run previews, payslips, and NIB form preparation.</p>
+          <button class="btn" onclick="setTestPlan('free')">Use free test plan</button>
+        </article>
+        <article class="${billing.tier === "paid" ? "selected" : ""}">
+          <span class="eyebrow">Paid</span>
+          <h3>Up to 5 employees</h3>
+          <p>Unlock up to five employee records for the company workspace. PayPal approval is simulated until sandbox credentials are connected.</p>
+          <button class="btn primary" onclick="setTestPlan('paid')">Simulate paid approval</button>
+        </article>
+      </div>
+      <div class="detail-grid plan-meter">
+        <div><span>Current usage</span><strong>${currentEmployees} / ${limit} employees</strong></div>
+        <div><span>Payment provider</span><strong>${escapeHtml(billing.provider || "manual")} ${escapeHtml(billing.providerMode || "test")}</strong></div>
+        <div><span>Subscription status</span><strong>${escapeHtml(billing.status || "active")}</strong></div>
+        <div><span>Subscription ID</span><strong>${escapeHtml(billing.subscriptionId || "Not connected")}</strong></div>
+      </div>
+      <div class="form-grid paypal-test-fields">
+        <label>PayPal Sandbox client ID<input id="paypal-client-id" type="text" value="${escapeHtml(paypalClientId)}" placeholder="sb or sandbox client ID"></label>
+        <label>PayPal Sandbox plan ID<input id="paypal-plan-id" type="text" value="${escapeHtml(paypalPlanId)}" placeholder="P-XXXXXXXXXXXX"></label>
+      </div>
+      <div class="actions paypal-actions">
+        <button class="btn" onclick="savePaypalSandboxSettings()">Save sandbox settings</button>
+        <button class="btn" onclick="renderPaypalSandboxButtons()">Load PayPal sandbox button</button>
+      </div>
+      <div id="paypal-button-container" class="paypal-button-container"></div>
+      <p class="caption">For real billing later, PayPal webhooks should confirm subscription activation, cancellation, and failed payments on the server before plan limits change.</p>
+    </section>
     <section class="panel">
       <div class="panel-head"><h2>Schedule and reminders</h2><button class="btn primary" onclick="saveSettings()" ${backendUnavailable ? "disabled" : ""}>Save settings</button></div>
       <div class="form-grid">
@@ -1656,6 +1775,10 @@ window.editEmployee = function editEmployee(employeeId) {
 };
 
 window.startNewEmployee = function startNewEmployee() {
+  if ((state?.employees || []).length >= employeeLimit()) {
+    toast(`${employeeLimitMessage()} Upgrade to the paid plan to add more employees.`);
+    return;
+  }
   editing = null;
   employeeEditorOpen = true;
   activeView = "employees";
@@ -1800,6 +1923,10 @@ window.saveEmployee = async function saveEmployee() {
   if (latestEmployee) {
     employee.payroll_adjustments = latestEmployee.payroll_adjustments || latestEmployee.payrollAdjustments || {};
   }
+  if (wouldExceedEmployeeLimit(employee)) {
+    toast(`${employeeLimitMessage()} Upgrade to the paid plan to add more employees.`);
+    return;
+  }
   const currentEmployee = employee;
   try {
     if (!localWorkspace && selectedCompanyId) {
@@ -1857,6 +1984,110 @@ window.saveSettings = async function saveSettings() {
     render();
   } catch (error) {
     toast(error.message);
+  }
+};
+
+async function persistBillingPlan(update) {
+  const tier = update.tier === "paid" ? "paid" : "free";
+  const plan = planDefinitions[tier];
+  const billing = {
+    ...selectedCompanyBilling(),
+    ...update,
+    tier,
+    status: update.status || "active",
+    employeeLimit: plan.employeeLimit,
+    updatedAtClient: new Date().toISOString(),
+  };
+  if (!localWorkspace && selectedCompanyId) {
+    try {
+      await saveCompanyBilling(selectedCompanyId, billing);
+    } catch (error) {
+      localStorage.setItem(billingStorageKey(selectedCompanyId), JSON.stringify(billing));
+      toast(`Billing saved for local preview. Firestore did not accept the test billing write: ${error.message}`);
+    }
+    companyBillingById[selectedCompanyId] = billing;
+  } else {
+    localStorage.setItem(billingStorageKey("local"), JSON.stringify(billing));
+  }
+  return billing;
+}
+
+window.setTestPlan = async function setTestPlan(tier) {
+  const billing = await persistBillingPlan({
+    tier,
+    provider: tier === "paid" ? "paypal" : "manual",
+    providerMode: "test",
+    subscriptionId: tier === "paid" ? `TEST-${Date.now()}` : "",
+  });
+  toast(`${planDefinitions[billing.tier].label} test plan active. ${employeeLimitMessage()}`);
+  render();
+};
+
+window.savePaypalSandboxSettings = function savePaypalSandboxSettings() {
+  const clientId = document.getElementById("paypal-client-id")?.value.trim() || "sb";
+  const planId = document.getElementById("paypal-plan-id")?.value.trim() || "";
+  localStorage.setItem("paypalSandboxClientId", clientId);
+  localStorage.setItem("paypalSandboxPlanId", planId);
+  toast("PayPal sandbox settings saved for this browser.");
+};
+
+function paypalScriptUrl(clientId) {
+  const params = new URLSearchParams({
+    "client-id": clientId || "sb",
+    components: "buttons",
+    vault: "true",
+    intent: "subscription",
+  });
+  return `https://www.paypal.com/sdk/js?${params.toString()}`;
+}
+
+window.renderPaypalSandboxButtons = async function renderPaypalSandboxButtons() {
+  window.savePaypalSandboxSettings();
+  const clientId = localStorage.getItem("paypalSandboxClientId") || "sb";
+  const planId = localStorage.getItem("paypalSandboxPlanId") || "";
+  const container = document.getElementById("paypal-button-container");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!planId) {
+    container.innerHTML = `<p class="caption">Add a PayPal Sandbox subscription plan ID first, or use Simulate paid approval for UI testing.</p>`;
+    return;
+  }
+  try {
+    if (!window.paypal || window.paypalClientId !== clientId) {
+      document.querySelectorAll("script[data-paypal-sdk]").forEach((script) => script.remove());
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = paypalScriptUrl(clientId);
+        script.dataset.paypalSdk = "true";
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("PayPal Sandbox SDK could not be loaded."));
+        document.head.appendChild(script);
+      });
+      window.paypalClientId = clientId;
+    }
+    window.paypal.Buttons({
+      style: { layout: "horizontal", label: "subscribe" },
+      createSubscription(data, actions) {
+        return actions.subscription.create({ plan_id: planId });
+      },
+      async onApprove(data) {
+        await persistBillingPlan({
+          tier: "paid",
+          status: "active",
+          provider: "paypal",
+          providerMode: "sandbox",
+          subscriptionId: data.subscriptionID || "",
+          paypalPlanId: planId,
+        });
+        toast("PayPal sandbox subscription approved. Paid test plan active.");
+        render();
+      },
+      onError(error) {
+        toast(error.message || "PayPal sandbox approval failed.");
+      },
+    }).render(container);
+  } catch (error) {
+    container.innerHTML = `<p class="caption">${escapeHtml(error.message)}</p>`;
   }
 };
 

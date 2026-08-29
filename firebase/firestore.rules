@@ -48,7 +48,12 @@ service cloud.firestore {
 
     match /companies/{companyId} {
       allow read: if isCompanyMember(companyId) || isPlatformAdmin();
-      allow create, update: if isPlatformAdmin();
+      allow create: if isPlatformAdmin();
+      allow update: if isPlatformAdmin()
+        || (
+          isCompanyAdmin(companyId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["billing", "updatedAt"])
+        );
 
       match /members/{userId} {
         allow read: if isCompanyMember(companyId) || isPlatformAdmin();
@@ -56,6 +61,11 @@ service cloud.firestore {
       }
 
       match /employees/{employeeId} {
+        allow read: if isCompanyMember(companyId) || isPlatformAdmin();
+        allow write: if isCompanyAdmin(companyId) || isPlatformAdmin();
+      }
+
+      match /billing/{billingId} {
         allow read: if isCompanyMember(companyId) || isPlatformAdmin();
         allow write: if isCompanyAdmin(companyId) || isPlatformAdmin();
       }
