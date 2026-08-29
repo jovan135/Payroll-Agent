@@ -47,6 +47,10 @@ export function listenForAuth(callback) {
   return onAuthStateChanged(auth, callback);
 }
 
+export function currentAuthUser() {
+  return auth.currentUser;
+}
+
 export async function signInWithGoogle(options = {}) {
   const provider = new GoogleAuthProvider();
   if (options.promptSelectAccount) {

@@ -1,6 +1,7 @@
 import {
   approveSignupRequest,
   completeRedirectSignIn,
+  currentAuthUser,
   ensureUserProfile,
   getAuthToken,
   listenForAuth,
@@ -674,31 +675,27 @@ async function refreshFirebaseState() {
 
 async function bootstrap() {
   renderLoading();
-  let authSettled = false;
   let redirectSettled = false;
-  settleWithTimeout(completeRedirectSignIn(), 8000).then((redirectResult) => {
-    redirectSettled = true;
-    if (redirectResult.status === "rejected") {
-      toast(friendlyAuthMessage(redirectResult.error));
-    } else if (redirectResult.status === "timeout") {
-      toast("Google sign-in is taking longer than expected. Continuing with the current session.");
-    }
-  });
-  const authStartupTimer = setTimeout(() => {
-    if (authSettled) return;
-    authSettled = true;
+  let handledUserId = "";
+  let noUserRendered = false;
+  const hadPendingRedirect = sessionStorage.getItem("authRedirectPending") === "true";
+  const renderNoUser = (message = "") => {
+    if (handledUserId || noUserRendered) return;
+    noUserRendered = true;
+    authUser = null;
     state ||= emptyLocalState();
     render();
-    if (!redirectSettled) {
-      toast("Firebase sign-in is taking longer than expected. Showing the login page.");
+    sessionStorage.removeItem("authRedirectPending");
+    if (message) {
+      toast(message);
+    } else if (hadPendingRedirect) {
+      toast("Google sign-in did not complete. Check that this exact domain is authorized in Firebase, then try again.");
     }
-  }, 9000);
-  listenForAuth(async (user) => {
-    if (authSettled && !authUser) {
-      clearTimeout(authStartupTimer);
-    }
-    authSettled = true;
-    clearTimeout(authStartupTimer);
+  };
+  const handleSignedInUser = async (user) => {
+    if (!user || handledUserId === user.uid) return;
+    handledUserId = user.uid;
+    noUserRendered = false;
     authUser = user;
     let fallbackRendered = false;
     const fallbackTimer = setTimeout(() => {
@@ -727,7 +724,32 @@ async function bootstrap() {
     } finally {
       clearTimeout(fallbackTimer);
     }
+  };
+
+  listenForAuth(async (user) => {
+    if (user) {
+      await handleSignedInUser(user);
+    } else if (redirectSettled && !currentAuthUser()) {
+      renderNoUser();
+    }
   });
+
+  const redirectResult = await settleWithTimeout(completeRedirectSignIn(), 10000);
+  redirectSettled = true;
+  if (redirectResult.status === "resolved" && redirectResult.value?.user) {
+    sessionStorage.removeItem("authRedirectPending");
+    await handleSignedInUser(redirectResult.value.user);
+  } else if (redirectResult.status === "rejected") {
+    renderNoUser(friendlyAuthMessage(redirectResult.error));
+  } else if (redirectResult.status === "timeout") {
+    if (currentAuthUser()) {
+      await handleSignedInUser(currentAuthUser());
+    } else {
+      renderNoUser("Google sign-in is taking longer than expected. Try again and keep the Google account page open until it returns.");
+    }
+  } else if (!handledUserId && !currentAuthUser()) {
+    renderNoUser();
+  }
 }
 
 function renderLoading() {
@@ -1665,8 +1687,10 @@ window.signIn = async function signIn(intent = "login") {
     }
     loadingMessage = "Opening Google sign-in...";
     renderLoading();
+    sessionStorage.setItem("authRedirectPending", "true");
     await signInWithGoogle({ promptSelectAccount: true, redirect: true });
   } catch (error) {
+    sessionStorage.removeItem("authRedirectPending");
     render();
     toast(friendlyAuthMessage(error));
   }
@@ -1684,6 +1708,7 @@ window.signOut = async function signOut() {
   localStorage.removeItem("localWorkspace");
   localStorage.removeItem("selectedCompanyId");
   localStorage.removeItem("authIntent");
+  sessionStorage.removeItem("authRedirectPending");
   render();
 };
 
