@@ -1698,12 +1698,18 @@ window.signIn = async function signIn(intent = "login") {
       return;
     }
     sessionStorage.removeItem("authRedirectPending");
-    const user = await signInWithGoogle({ promptSelectAccount: true, redirect: false });
-    if (user) {
-      authUser = user;
+    const popupResult = await settleWithTimeout(signInWithGoogle({ promptSelectAccount: true, redirect: false }), 7000);
+    if (popupResult.status === "resolved" && popupResult.value) {
+      authUser = popupResult.value;
       await prepareSignedInWorkspace();
       render();
+      return;
     }
+    if (popupResult.status === "rejected") {
+      throw popupResult.error;
+    }
+    sessionStorage.setItem("authRedirectPending", "true");
+    await signInWithGoogle({ promptSelectAccount: true, redirect: true });
   } catch (error) {
     sessionStorage.removeItem("authRedirectPending");
     render();
