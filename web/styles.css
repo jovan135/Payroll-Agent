@@ -350,6 +350,18 @@ button {
   line-height: 1.45;
 }
 
+.notice.warning {
+  border-color: #f1d098;
+  background: #fff7e8;
+  color: #5f3b00;
+}
+
+.notice.danger {
+  border-color: #efb4b4;
+  background: #fff0f0;
+  color: #6b2424;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -492,6 +504,21 @@ th {
 .paypal-button-container {
   margin-top: 12px;
   max-width: 520px;
+}
+
+.admin-billing-controls {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.admin-billing-controls h3 {
+  margin: 0 0 12px;
+}
+
+.admin-comp-check {
+  justify-content: flex-start;
+  margin-top: 12px;
 }
 
 .run-review {

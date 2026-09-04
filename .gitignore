@@ -3,3 +3,4 @@ __pycache__/
 scratch/
 .vercel/
 dist/
+node_modules/

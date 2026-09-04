@@ -1,6 +1,7 @@
 const PROJECT_ID = "payroll-application-f6d25";
 const DATABASE = "(default)";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE}/documents`;
+const { assertCanCreatePayroll } = require("./lib/billing-access");
 
 function sendJson(response, status, payload) {
   response.status(status).setHeader("Content-Type", "application/json");
@@ -383,6 +384,7 @@ module.exports = async function handler(request, response) {
       firestoreFetch(`companies/${encodeURIComponent(companyId)}/payrollRuns/${encodeURIComponent(month)}`, token),
     ]);
     const company = fromFirestoreFields(companyDoc.fields || {});
+    assertCanCreatePayroll(company.billing || {});
     const run = fromFirestoreFields(runDoc.fields || {});
     if (!Array.isArray(run.rows) || !run.rows.length) {
       sendJson(response, 400, { error: "Run payroll first so there is a draft to approve." });
@@ -405,6 +407,6 @@ module.exports = async function handler(request, response) {
 
     sendJson(response, 200, { status: "approved", run: finalized });
   } catch (error) {
-    sendJson(response, error.status || 500, { error: error.message || "Payroll finalization failed." });
+    sendJson(response, error.status || 500, { code: error.code, error: error.message || "Payroll finalization failed." });
   }
 };

@@ -26,6 +26,21 @@ import { firebaseConfig } from "./firebase-config.js";
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+const standardPlan = {
+  planId: "monthly_standard",
+  monthlyFee: 7.99,
+  currency: "USD",
+  employeeLimit: 10,
+  trialLengthDays: 30,
+};
+
+function trialEndDate() {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + standardPlan.trialLengthDays);
+  return date.toISOString();
+}
+
 function isPermissionError(error) {
   return error?.code === "permission-denied" || String(error?.message || "").includes("Missing or insufficient permissions");
 }
@@ -184,11 +199,19 @@ export async function loadAdminSignupRequests() {
 export async function approveSignupRequest(request) {
   const companyRef = doc(collection(db, "companies"));
   const billing = {
-    tier: "free",
-    status: "active",
-    employeeLimit: 1,
-    provider: "manual",
-    providerMode: "test",
+    provider: "paypal",
+    status: "trial",
+    planId: standardPlan.planId,
+    monthlyFee: standardPlan.monthlyFee,
+    currency: standardPlan.currency,
+    subscriptionId: "",
+    customerId: "",
+    trialEndsAt: trialEndDate(),
+    currentPeriodEnd: "",
+    lastPaymentAt: "",
+    employeeLimit: standardPlan.employeeLimit,
+    comped: false,
+    providerMode: "sandbox",
   };
   const company = {
     name: request.companyName,
@@ -277,12 +300,19 @@ export async function saveCompanyBilling(companyId, billing) {
   }, { merge: true });
   await setDoc(doc(db, "companies", companyId), {
     billing: {
-      tier: billing.tier,
       status: billing.status,
+      planId: billing.planId,
+      monthlyFee: billing.monthlyFee,
+      currency: billing.currency,
       employeeLimit: billing.employeeLimit,
       provider: billing.provider,
       providerMode: billing.providerMode,
       subscriptionId: billing.subscriptionId || "",
+      customerId: billing.customerId || "",
+      trialEndsAt: billing.trialEndsAt || "",
+      currentPeriodEnd: billing.currentPeriodEnd || "",
+      lastPaymentAt: billing.lastPaymentAt || "",
+      comped: Boolean(billing.comped),
     },
     updatedAt: serverTimestamp(),
   }, { merge: true });

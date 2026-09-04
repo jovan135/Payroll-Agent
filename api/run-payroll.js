@@ -1,6 +1,7 @@
 const PROJECT_ID = "payroll-application-f6d25";
 const DATABASE = "(default)";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE}/documents`;
+const { assertCanCreatePayroll } = require("./lib/billing-access");
 
 const NIS_RATES = [
   ["I", 867, 1472.99, 14.60, 29.20, 43.80],
@@ -409,6 +410,7 @@ module.exports = async function handler(request, response) {
 
     const companyDoc = await firestoreFetch(`companies/${encodeURIComponent(companyId)}`, token);
     const company = fromFirestoreFields(companyDoc.fields || {});
+    assertCanCreatePayroll(company.billing || {});
     const employeesPayload = await firestoreFetch(`companies/${encodeURIComponent(companyId)}/employees`, token);
     const employees = (employeesPayload.documents || []).map((doc) => ({
       id: doc.name.split("/").pop(),
@@ -462,6 +464,6 @@ module.exports = async function handler(request, response) {
 
     sendJson(response, 200, { status: "draft", run });
   } catch (error) {
-    sendJson(response, error.status || 500, { error: error.message || "Payroll run failed." });
+    sendJson(response, error.status || 500, { code: error.code, error: error.message || "Payroll run failed." });
   }
 };

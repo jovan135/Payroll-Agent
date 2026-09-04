@@ -46,6 +46,11 @@ service cloud.firestore {
       allow update: if isPlatformAdmin();
     }
 
+    match /plans/{planId} {
+      allow read: if signedIn();
+      allow write: if isPlatformAdmin();
+    }
+
     match /companies/{companyId} {
       allow read: if isCompanyMember(companyId) || isPlatformAdmin();
       allow create: if isPlatformAdmin();
