@@ -1706,8 +1706,8 @@ function settingsView() {
         <article class="${billing.status === "active" ? "selected" : ""}">
           <span class="eyebrow">Standard</span>
           <h3>${escapeHtml(plan.priceLabel)}</h3>
-          <p>${escapeHtml(plan.description)} PayPal Sandbox approval can activate the plan before live billing is enabled.</p>
-          <button class="btn primary" onclick="setTestPlan('active')">Simulate paid approval</button>
+          <p>${escapeHtml(plan.description)} PayPal Sandbox checkout activates the plan and records the subscription on this company account.</p>
+          <button class="btn primary" onclick="renderPaypalSandboxButtons()">Subscribe with PayPal</button>
         </article>
       </div>
       <div class="detail-grid plan-meter">
@@ -1718,18 +1718,19 @@ function settingsView() {
         <div><span>Subscription status</span><strong>${escapeHtml(statusMeta.label)}</strong></div>
         <div><span>Subscription ID</span><strong>${escapeHtml(billing.subscriptionId || "Not connected")}</strong></div>
       </div>
-      <div class="form-grid paypal-test-fields">
-        <label>PayPal Sandbox client ID<input id="paypal-client-id" type="text" value="${escapeHtml(paypalClientId)}" placeholder="sb or sandbox client ID"></label>
-        <label>PayPal Sandbox plan ID<input id="paypal-plan-id" type="text" value="${escapeHtml(paypalPlanId)}" placeholder="P-XXXXXXXXXXXX"></label>
-      </div>
-      <div class="actions paypal-actions">
-        <button class="btn" onclick="savePaypalSandboxSettings()">Save sandbox settings</button>
-        <button class="btn" onclick="renderPaypalSandboxButtons()">Load PayPal sandbox button</button>
-      </div>
       <div id="paypal-button-container" class="paypal-button-container"></div>
       ${isAdmin() ? `
         <div class="admin-billing-controls">
           <h3>Admin billing override</h3>
+          <div class="form-grid paypal-test-fields">
+            <label>PayPal Sandbox client ID<input id="paypal-client-id" type="text" value="${escapeHtml(paypalClientId)}" placeholder="Loaded from Vercel"></label>
+            <label>PayPal Sandbox plan ID<input id="paypal-plan-id" type="text" value="${escapeHtml(paypalPlanId)}" placeholder="Loaded from Vercel"></label>
+          </div>
+          <div class="actions paypal-actions">
+            <button class="btn" onclick="savePaypalSandboxSettings()">Save sandbox settings</button>
+            <button class="btn" onclick="renderPaypalSandboxButtons()">Reload PayPal button</button>
+            <button class="btn" onclick="setTestPlan('active')">Simulate paid approval</button>
+          </div>
           <div class="form-grid">
             <label>Status
               <select id="admin-billing-status">
@@ -2279,9 +2280,16 @@ window.saveBillingOverride = async function saveBillingOverride() {
   render();
 };
 
+function isPlaceholderPaypalPlanId(planId) {
+  return !planId || /^P-X+$/i.test(planId) || String(planId).toUpperCase() === "P-XXXXXXXXXXXX";
+}
+
 window.savePaypalSandboxSettings = function savePaypalSandboxSettings() {
-  const clientId = document.getElementById("paypal-client-id")?.value.trim() || "sb";
-  const planId = document.getElementById("paypal-plan-id")?.value.trim() || "";
+  const clientField = document.getElementById("paypal-client-id");
+  const planField = document.getElementById("paypal-plan-id");
+  if (!clientField && !planField) return;
+  const clientId = clientField?.value.trim() || "sb";
+  const planId = planField?.value.trim() || "";
   localStorage.setItem("paypalSandboxClientId", clientId);
   localStorage.setItem("paypalSandboxPlanId", planId);
   toast("PayPal sandbox settings saved for this browser.");
@@ -2304,7 +2312,8 @@ async function loadPaypalSandboxConfig() {
     if (config.clientId && (!savedClientId || savedClientId === "sb")) {
       localStorage.setItem("paypalSandboxClientId", config.clientId);
     }
-    if (config.planId && !localStorage.getItem("paypalSandboxPlanId")) {
+    const savedPlanId = localStorage.getItem("paypalSandboxPlanId");
+    if (config.planId && isPlaceholderPaypalPlanId(savedPlanId)) {
       localStorage.setItem("paypalSandboxPlanId", config.planId);
     }
     return config;
@@ -2317,7 +2326,8 @@ window.renderPaypalSandboxButtons = async function renderPaypalSandboxButtons() 
   window.savePaypalSandboxSettings();
   const config = await loadPaypalSandboxConfig();
   const clientId = localStorage.getItem("paypalSandboxClientId") || config?.clientId || "sb";
-  const planId = localStorage.getItem("paypalSandboxPlanId") || config?.planId || "";
+  let planId = localStorage.getItem("paypalSandboxPlanId") || config?.planId || "";
+  if (isPlaceholderPaypalPlanId(planId)) planId = config?.planId || "";
   const container = document.getElementById("paypal-button-container");
   if (!container) return;
   const clientField = document.getElementById("paypal-client-id");
@@ -2326,7 +2336,7 @@ window.renderPaypalSandboxButtons = async function renderPaypalSandboxButtons() 
   if (planField) planField.value = planId;
   container.innerHTML = "";
   if (!planId) {
-    container.innerHTML = `<p class="caption">Add the PayPal Sandbox subscription plan ID first, or use Simulate paid approval for UI testing.</p>`;
+    container.innerHTML = `<p class="caption">PayPal billing is not configured yet. Ask the platform administrator to confirm the sandbox plan ID in Vercel.</p>`;
     return;
   }
   try {
