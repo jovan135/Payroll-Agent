@@ -71,6 +71,32 @@ async function createSubscription({ companyId, planId, returnUrl, cancelUrl }) {
   return payload;
 }
 
+async function cancelSubscription({ subscriptionId, reason = "Customer requested cancellation." }) {
+  if (!subscriptionId) {
+    const error = new Error("PayPal subscription ID is required.");
+    error.status = 400;
+    throw error;
+  }
+  const accessToken = await paypalAccessToken();
+  const response = await fetch(`${paypalBaseUrl()}/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ reason }),
+  });
+  if (response.status === 204) return { status: "CANCELLED" };
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const details = payload.details?.map((item) => item.description || item.issue).filter(Boolean).join(" ");
+    const error = new Error(details || payload.message || "PayPal subscription cancellation failed.");
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
 async function verifyWebhookSignature(headers, webhookEvent) {
   const webhookId = process.env.PAYPAL_WEBHOOK_ID || "";
   if (!webhookId) {
@@ -105,6 +131,7 @@ async function verifyWebhookSignature(headers, webhookEvent) {
 }
 
 module.exports = {
+  cancelSubscription,
   createSubscription,
   paypalEnvironment,
   verifyWebhookSignature,

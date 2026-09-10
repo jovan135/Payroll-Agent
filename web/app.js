@@ -1672,6 +1672,9 @@ function settingsView() {
   const limit = employeeLimit();
   const currentEmployees = state.employees.length;
   const hasActivePlan = billing.status === "active" || billing.status === "comped" || billing.comped;
+  const canCancelSubscription = billing.status === "active"
+    && billing.provider === "paypal"
+    && /^I-/i.test(String(billing.subscriptionId || ""));
   const paypalClientId = localStorage.getItem("paypalSandboxClientId") || "sb";
   const paypalPlanId = localStorage.getItem("paypalSandboxPlanId") || billing.paypalPlanId || "";
   return `
@@ -1711,7 +1714,8 @@ function settingsView() {
           <h3>${escapeHtml(plan.priceLabel)}</h3>
           <p>${escapeHtml(plan.description)} PayPal Sandbox checkout activates the plan and records the subscription on this company account.</p>
           ${hasActivePlan
-            ? `<div class="plan-state success">Standard plan active</div>`
+            ? `<div class="plan-state success">Standard plan active</div>
+              ${canCancelSubscription ? `<button class="btn danger-btn" onclick="cancelPaypalSubscription()">Cancel subscription</button>` : ""}`
             : `<button class="btn primary" onclick="renderPaypalSandboxButtons()">Subscribe with PayPal</button>`}
         </article>
       </div>
@@ -2283,6 +2287,47 @@ window.saveBillingOverride = async function saveBillingOverride() {
   });
   toast("Billing override saved.");
   render();
+};
+
+window.cancelPaypalSubscription = async function cancelPaypalSubscription() {
+  const billing = selectedCompanyBilling();
+  if (!billing.subscriptionId) return toast("No PayPal subscription is connected to this account.");
+  const confirmed = window.confirm("Cancel this PayPal subscription? The company will keep access to old records, but new payroll runs will be locked unless the account is reactivated.");
+  if (!confirmed) return;
+
+  try {
+    if (localWorkspace || !selectedCompanyId) {
+      await persistBillingPlan({
+        status: "canceled",
+        currentPeriodEnd: "",
+        overrideNote: "Customer requested cancellation.",
+      });
+      toast("Subscription marked canceled for this local workspace.");
+      render();
+      return;
+    }
+
+    const token = await getAuthToken();
+    const payload = await api("/api/paypal/cancel-subscription", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        companyId: selectedCompanyId,
+        reason: "Customer requested cancellation.",
+      }),
+      timeoutMs: 12000,
+    });
+    companyBillingById[selectedCompanyId] = normalizeBilling(payload.billing || {
+      ...billing,
+      status: "canceled",
+      currentPeriodEnd: "",
+      overrideNote: "Customer requested cancellation.",
+    });
+    toast("PayPal subscription canceled. The account can still view old records.");
+    render();
+  } catch (error) {
+    toast(error.message || "Subscription cancellation failed.");
+  }
 };
 
 function isPlaceholderPaypalPlanId(planId) {
