@@ -1671,6 +1671,7 @@ function settingsView() {
   const statusMeta = billingStatusMeta(billing.status);
   const limit = employeeLimit();
   const currentEmployees = state.employees.length;
+  const hasActivePlan = billing.status === "active" || billing.status === "comped" || billing.comped;
   const paypalClientId = localStorage.getItem("paypalSandboxClientId") || "sb";
   const paypalPlanId = localStorage.getItem("paypalSandboxPlanId") || billing.paypalPlanId || "";
   return `
@@ -1701,13 +1702,17 @@ function settingsView() {
           <span class="eyebrow">30-day trial</span>
           <h3>Up to 10 employees</h3>
           <p>Trial companies can run payroll, prepare payslips, and generate NIB form outputs until the trial ends.</p>
-          <button class="btn" onclick="setTestPlan('trial')">Start trial test</button>
+          ${hasActivePlan
+            ? `<div class="plan-state">Trial complete</div>`
+            : `<button class="btn" onclick="setTestPlan('trial')">Start trial test</button>`}
         </article>
         <article class="${billing.status === "active" ? "selected" : ""}">
           <span class="eyebrow">Standard</span>
           <h3>${escapeHtml(plan.priceLabel)}</h3>
           <p>${escapeHtml(plan.description)} PayPal Sandbox checkout activates the plan and records the subscription on this company account.</p>
-          <button class="btn primary" onclick="renderPaypalSandboxButtons()">Subscribe with PayPal</button>
+          ${hasActivePlan
+            ? `<div class="plan-state success">Standard plan active</div>`
+            : `<button class="btn primary" onclick="renderPaypalSandboxButtons()">Subscribe with PayPal</button>`}
         </article>
       </div>
       <div class="detail-grid plan-meter">

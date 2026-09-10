@@ -488,6 +488,22 @@ th {
   line-height: 1.5;
 }
 
+.plan-state {
+  display: grid;
+  min-height: 38px;
+  align-items: center;
+  justify-items: center;
+  border-radius: 8px;
+  background: #eef3f5;
+  color: #506270;
+  font-weight: 800;
+}
+
+.plan-state.success {
+  background: rgba(0, 127, 122, 0.12);
+  color: var(--brand);
+}
+
 .plan-meter {
   margin-top: 14px;
 }
