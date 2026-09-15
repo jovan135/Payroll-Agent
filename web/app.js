@@ -504,6 +504,18 @@ function selectedCompanyProfile() {
     } : null);
 }
 
+function isJspaWorkspace() {
+  const profile = selectedCompanyProfile();
+  const text = [
+    profile?.name,
+    profile?.legalName,
+    profile?.tradeName,
+    profile?.contactEmail,
+    selectedMembership()?.company?.contactEmail,
+  ].filter(Boolean).join(" ");
+  return /j\s*spa/i.test(text) || /thejspa@gmail\.com/i.test(text);
+}
+
 function defaultCompanyBilling() {
   const plan = planDefinitions[defaultPlanId];
   const trialEndsAt = new Date();
@@ -1259,6 +1271,7 @@ function employeesView() {
   const canSaveAdjustments = Boolean(state.employees.length) && (!backendUnavailable || (!localWorkspace && selectedCompanyId));
   const limit = employeeLimit();
   const atLimit = state.employees.length >= limit;
+  const canRestoreCompanyRecords = !localWorkspace && selectedCompanyId && isJspaWorkspace();
   const adjustments = adjustmentRowsForEditor();
   const form = fields.map(([key, label, type]) => `
     <label>${label}
@@ -1272,6 +1285,7 @@ function employeesView() {
         <h2>Employee list</h2>
         <div class="actions">
           <span class="status ${atLimit ? "warning" : "neutral"}">${state.employees.length} / ${limit} records</span>
+          ${canRestoreCompanyRecords ? `<button class="btn" onclick="restoreJspaEmployees()">Restore company records</button>` : ""}
           <button class="btn primary" onclick="startNewEmployee()" ${atLimit ? "disabled" : ""}>Add employee</button>
         </div>
       </div>
@@ -2178,6 +2192,23 @@ window.saveEmployee = async function saveEmployee() {
     }
     editing = null;
     employeeEditorOpen = false;
+    render();
+  } catch (error) {
+    toast(error.message);
+  }
+};
+
+window.restoreJspaEmployees = async function restoreJspaEmployees() {
+  if (localWorkspace || !selectedCompanyId || !isJspaWorkspace()) return toast("Open The J Spa company workspace first.");
+  const incomingEmployeeIds = localCompanyImport.employees.map((employee) => employee.employee_id).join(", ");
+  if (!window.confirm(`Restore these employee records to this company workspace: ${incomingEmployeeIds}? Existing matching records will be updated and set to active.`)) return;
+  try {
+    await Promise.all(localCompanyImport.employees.map((employee) => saveCompanyEmployee(selectedCompanyId, {
+      ...employee,
+      active: true,
+    })));
+    await loadWorkspaceState();
+    toast("The J Spa employee records restored.");
     render();
   } catch (error) {
     toast(error.message);
