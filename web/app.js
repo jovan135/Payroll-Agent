@@ -772,10 +772,11 @@ async function loadHostedCompanyEmployees(companyId) {
 async function loadWorkspaceState() {
   await loadLocalState();
   if (localWorkspace || !selectedCompanyId) return;
+  const profileBilling = selectedCompanyProfile()?.billing || null;
   const [employeesResult, payrollRunsResult, billingResult] = await Promise.allSettled([
     loadHostedCompanyEmployees(selectedCompanyId),
     withTimeout(loadCompanyPayrollRuns(selectedCompanyId), 8000, []),
-    withTimeout(loadCompanyBilling(selectedCompanyId), 8000, null),
+    profileBilling ? Promise.resolve(profileBilling) : withTimeout(loadCompanyBilling(selectedCompanyId), 8000, null),
   ]);
   const employees = employeesResult.status === "fulfilled" ? employeesResult.value : [];
   const payrollRuns = payrollRunsResult.status === "fulfilled" ? payrollRunsResult.value : [];
