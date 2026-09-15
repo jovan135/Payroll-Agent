@@ -7,7 +7,6 @@ import {
   listenForAuth,
   loadAdminSignupRequests,
   loadCompanyBilling,
-  loadCompanyEmployees,
   loadCompanyPayrollRuns,
   loadMemberships,
   loadMySignupRequests,
@@ -757,26 +756,41 @@ async function loadLocalState() {
   }
 }
 
+async function loadHostedCompanyEmployees(companyId) {
+  const token = await getAuthToken();
+  const payload = await api("/api/company-employees", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ companyId }),
+  });
+  return Array.isArray(payload.employees) ? payload.employees : [];
+}
+
 async function loadWorkspaceState() {
   await loadLocalState();
   if (localWorkspace || !selectedCompanyId) return;
-  try {
-    const [employees, payrollRuns, billing] = await Promise.all([
-      withTimeout(loadCompanyEmployees(selectedCompanyId), 8000, []),
-      withTimeout(loadCompanyPayrollRuns(selectedCompanyId), 8000, []),
-      withTimeout(loadCompanyBilling(selectedCompanyId), 8000, null),
-    ]);
-    companyBillingById[selectedCompanyId] = billing || selectedCompanyProfile()?.billing || loadLocalBilling(selectedCompanyId);
-    const runs = payrollRuns.map(normalizeRun).sort((a, b) => String(b.month).localeCompare(String(a.month)));
-    state = {
-      ...state,
-      employees: employees.sort((a, b) => String(a.employee_id || "").localeCompare(String(b.employee_id || ""))),
-      runs,
-      latest_run: runs[0] || state.latest_run,
-    };
-  } catch {
-    // Company Firestore data may be unavailable until rules/memberships are fully set up.
-  }
+  const [employeesResult, payrollRunsResult, billingResult] = await Promise.allSettled([
+    loadHostedCompanyEmployees(selectedCompanyId),
+    withTimeout(loadCompanyPayrollRuns(selectedCompanyId), 8000, []),
+    withTimeout(loadCompanyBilling(selectedCompanyId), 8000, null),
+  ]);
+  const employees = employeesResult.status === "fulfilled" ? employeesResult.value : [];
+  const payrollRuns = payrollRunsResult.status === "fulfilled" ? payrollRunsResult.value : [];
+  const billing = billingResult.status === "fulfilled" ? billingResult.value : null;
+  if (employeesResult.status === "rejected") console.error("Employee records could not be loaded.", employeesResult.reason);
+  if (payrollRunsResult.status === "rejected") console.error("Payroll runs could not be loaded.", payrollRunsResult.reason);
+  if (billingResult.status === "rejected") console.error("Billing could not be loaded.", billingResult.reason);
+  companyBillingById[selectedCompanyId] = billing || selectedCompanyProfile()?.billing || loadLocalBilling(selectedCompanyId);
+  const runs = payrollRuns.map(normalizeRun).sort((a, b) => String(b.month).localeCompare(String(a.month)));
+  state = {
+    ...state,
+    employees: employees.sort((a, b) => String(a.employee_id || "").localeCompare(String(b.employee_id || ""))),
+    runs,
+    latest_run: runs[0] || state.latest_run,
+  };
 }
 
 async function refreshFirebaseState() {

@@ -1,5 +1,7 @@
 const crypto = require("crypto");
 
+const DEFAULT_PROJECT_ID = "payroll-application-f6d25";
+
 function serviceAccountFromEnv() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
     return JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, "base64").toString("utf8"));
@@ -77,19 +79,29 @@ function toFirestoreFields(data) {
   return Object.fromEntries(Object.entries(data).map(([key, value]) => [key, toFirestoreValue(value)]));
 }
 
-async function firestoreFetch(path, options = {}) {
-  const token = await googleAccessToken();
-  const projectId = process.env.FIREBASE_PROJECT_ID || "payroll-application-f6d25";
-  const database = "(default)";
-  const base = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${database}/documents`;
-  const response = await fetch(`${base}/${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-  });
+function fromFirestoreValue(value) {
+  if (!value || typeof value !== "object") return null;
+  if ("stringValue" in value) return value.stringValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return Number(value.doubleValue);
+  if ("booleanValue" in value) return Boolean(value.booleanValue);
+  if ("timestampValue" in value) return value.timestampValue;
+  if ("nullValue" in value) return null;
+  if ("arrayValue" in value) return (value.arrayValue.values || []).map(fromFirestoreValue);
+  if ("mapValue" in value) return fromFirestoreFields(value.mapValue.fields || {});
+  return null;
+}
+
+function fromFirestoreFields(fields) {
+  return Object.fromEntries(Object.entries(fields || {}).map(([key, value]) => [key, fromFirestoreValue(value)]));
+}
+
+function firestoreBase() {
+  const projectId = process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID;
+  return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+}
+
+async function parseFirestoreResponse(response) {
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};
   if (!response.ok) {
@@ -98,6 +110,31 @@ async function firestoreFetch(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+async function firestoreFetch(path, options = {}) {
+  const token = await googleAccessToken();
+  const response = await fetch(`${firestoreBase()}/${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  return parseFirestoreResponse(response);
+}
+
+async function firestoreFetchAsUser(path, token, options = {}) {
+  const response = await fetch(`${firestoreBase()}/${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  return parseFirestoreResponse(response);
 }
 
 async function saveCompanyBilling(companyId, billing) {
@@ -121,7 +158,9 @@ async function saveCompanyBilling(companyId, billing) {
 }
 
 module.exports = {
+  firestoreFetchAsUser,
   firestoreFetch,
+  fromFirestoreFields,
   saveCompanyBilling,
   toFirestoreFields,
 };

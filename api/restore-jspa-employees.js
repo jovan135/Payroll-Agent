@@ -1,8 +1,9 @@
-const { firestoreFetch, toFirestoreFields } = require("./lib/firestore-service");
-
-const PROJECT_ID = "payroll-application-f6d25";
-const DATABASE = "(default)";
-const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE}/documents`;
+const {
+  firestoreFetch,
+  firestoreFetchAsUser,
+  fromFirestoreFields,
+  toFirestoreFields,
+} = require("./lib/firestore-service");
 
 const JSPA_EMPLOYEES = [
   {
@@ -63,38 +64,8 @@ function sendJson(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function fromFirestoreValue(value) {
-  if (!value || typeof value !== "object") return null;
-  if ("stringValue" in value) return value.stringValue;
-  if ("integerValue" in value) return Number(value.integerValue);
-  if ("doubleValue" in value) return Number(value.doubleValue);
-  if ("booleanValue" in value) return Boolean(value.booleanValue);
-  if ("timestampValue" in value) return value.timestampValue;
-  if ("nullValue" in value) return null;
-  if ("arrayValue" in value) return (value.arrayValue.values || []).map(fromFirestoreValue);
-  if ("mapValue" in value) {
-    return Object.fromEntries(Object.entries(value.mapValue.fields || {}).map(([key, item]) => [key, fromFirestoreValue(item)]));
-  }
-  return null;
-}
-
-function fromFirestoreFields(fields) {
-  return Object.fromEntries(Object.entries(fields || {}).map(([key, value]) => [key, fromFirestoreValue(value)]));
-}
-
 async function fetchCompanyForUser(companyId, token) {
-  const response = await fetch(`${FIRESTORE_BASE}/companies/${encodeURIComponent(companyId)}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(payload?.error?.message || "You do not have access to this company workspace.");
-    error.status = response.status;
-    throw error;
-  }
+  const payload = await firestoreFetchAsUser(`companies/${encodeURIComponent(companyId)}`, token);
   return fromFirestoreFields(payload.fields || {});
 }
 
@@ -151,11 +122,18 @@ module.exports = async function handler(request, response) {
       },
     )));
 
+    const restoredPayload = await firestoreFetch(
+      `companies/${encodeURIComponent(companyId)}/employees?pageSize=100`,
+    );
+    const restoredIds = (restoredPayload.documents || []).map((document) => document.name.split("/").pop());
+    console.log("[restore-jspa-employees] restore verified", { employeeCount: restoredIds.length });
+
     sendJson(response, 200, {
       status: "restored",
-      employees: JSPA_EMPLOYEES.map((employee) => employee.employee_id),
+      employees: restoredIds,
     });
   } catch (error) {
+    console.error("[restore-jspa-employees] failed", { error: error.message, status: error.status || 500 });
     sendJson(response, error.status || 500, { error: error.message || "Employee restore failed." });
   }
 };
