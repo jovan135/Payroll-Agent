@@ -121,5 +121,7 @@ async function saveCompanyBilling(companyId, billing) {
 }
 
 module.exports = {
+  firestoreFetch,
   saveCompanyBilling,
+  toFirestoreFields,
 };

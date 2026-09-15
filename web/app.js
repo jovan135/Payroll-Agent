@@ -2203,12 +2203,17 @@ window.restoreJspaEmployees = async function restoreJspaEmployees() {
   const incomingEmployeeIds = localCompanyImport.employees.map((employee) => employee.employee_id).join(", ");
   if (!window.confirm(`Restore these employee records to this company workspace: ${incomingEmployeeIds}? Existing matching records will be updated and set to active.`)) return;
   try {
-    await Promise.all(localCompanyImport.employees.map((employee) => saveCompanyEmployee(selectedCompanyId, {
-      ...employee,
-      active: true,
-    })));
+    const token = await getAuthToken();
+    const payload = await api("/api/restore-jspa-employees", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ companyId: selectedCompanyId }),
+    });
     await loadWorkspaceState();
-    toast("The J Spa employee records restored.");
+    toast(`Restored ${payload.employees?.length || 0} employee records.`);
     render();
   } catch (error) {
     toast(error.message);
