@@ -6,7 +6,6 @@ import {
   getAuthToken,
   listenForAuth,
   loadAdminSignupRequests,
-  loadCompanyBilling,
   loadCompanyPayrollRuns,
   loadMemberships,
   loadMySignupRequests,
@@ -756,7 +755,7 @@ async function loadLocalState() {
   }
 }
 
-async function loadHostedCompanyEmployees(companyId) {
+async function loadHostedCompanyData(companyId) {
   const token = await getAuthToken();
   const payload = await api("/api/company-employees", {
     method: "POST",
@@ -766,24 +765,25 @@ async function loadHostedCompanyEmployees(companyId) {
     },
     body: JSON.stringify({ companyId }),
   });
-  return Array.isArray(payload.employees) ? payload.employees : [];
+  return {
+    employees: Array.isArray(payload.employees) ? payload.employees : [],
+    billing: payload.billing || null,
+  };
 }
 
 async function loadWorkspaceState() {
   await loadLocalState();
   if (localWorkspace || !selectedCompanyId) return;
-  const profileBilling = selectedCompanyProfile()?.billing || null;
-  const [employeesResult, payrollRunsResult, billingResult] = await Promise.allSettled([
-    loadHostedCompanyEmployees(selectedCompanyId),
+  const [companyDataResult, payrollRunsResult] = await Promise.allSettled([
+    loadHostedCompanyData(selectedCompanyId),
     withTimeout(loadCompanyPayrollRuns(selectedCompanyId), 8000, []),
-    profileBilling ? Promise.resolve(profileBilling) : withTimeout(loadCompanyBilling(selectedCompanyId), 8000, null),
   ]);
-  const employees = employeesResult.status === "fulfilled" ? employeesResult.value : [];
+  const companyData = companyDataResult.status === "fulfilled" ? companyDataResult.value : { employees: [], billing: null };
+  const employees = companyData.employees;
   const payrollRuns = payrollRunsResult.status === "fulfilled" ? payrollRunsResult.value : [];
-  const billing = billingResult.status === "fulfilled" ? billingResult.value : null;
-  if (employeesResult.status === "rejected") console.error("Employee records could not be loaded.", employeesResult.reason);
+  const billing = companyData.billing;
+  if (companyDataResult.status === "rejected") console.error("Company records could not be loaded.", companyDataResult.reason);
   if (payrollRunsResult.status === "rejected") console.error("Payroll runs could not be loaded.", payrollRunsResult.reason);
-  if (billingResult.status === "rejected") console.error("Billing could not be loaded.", billingResult.reason);
   companyBillingById[selectedCompanyId] = billing || selectedCompanyProfile()?.billing || loadLocalBilling(selectedCompanyId);
   const runs = payrollRuns.map(normalizeRun).sort((a, b) => String(b.month).localeCompare(String(a.month)));
   state = {

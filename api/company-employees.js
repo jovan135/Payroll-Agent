@@ -30,15 +30,23 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    await firestoreFetchAsUser(`companies/${encodeURIComponent(companyId)}`, token);
+    const companyDocument = await firestoreFetchAsUser(`companies/${encodeURIComponent(companyId)}`, token);
+    const company = fromFirestoreFields(companyDocument.fields || {});
     const payload = await firestoreFetch(`companies/${encodeURIComponent(companyId)}/employees?pageSize=100`);
     const employees = (payload.documents || []).map((document) => ({
       id: document.name.split("/").pop(),
       ...fromFirestoreFields(document.fields || {}),
     }));
+    let billing = company.billing || null;
+    try {
+      const billingDocument = await firestoreFetch(`companies/${encodeURIComponent(companyId)}/billing/current`);
+      billing = fromFirestoreFields(billingDocument.fields || {});
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
 
     console.log("[company-employees] records loaded", { employeeCount: employees.length });
-    sendJson(response, 200, { employees });
+    sendJson(response, 200, { employees, billing });
   } catch (error) {
     console.error("[company-employees] failed", { error: error.message, status: error.status || 500 });
     sendJson(response, error.status || 500, { error: error.message || "Employee records could not be loaded." });
