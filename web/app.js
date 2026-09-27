@@ -376,6 +376,8 @@ function normalizeRun(run) {
         fileName: payslip.fileName || payslip.file || "",
         employeeId: payslip.employeeId || payslip.employee_id || "",
         fullName: payslip.fullName || payslip.full_name || "",
+        contentType: payslip.contentType || payslip.content_type || (payslip.pdfBase64 ? "application/pdf" : "text/html"),
+        pdfBase64: payslip.pdfBase64 || payslip.pdf_base64 || "",
         html: payslip.html || "",
       }
   )) : [];
@@ -1401,11 +1403,15 @@ function runList(runs) {
 }
 
 function formBadges(run) {
-  const ni184 = run.outputs?.ni184Html
-    ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni184Html', 'html')">NI184 draft</button>`
+  const ni184 = run.outputs?.ni184Pdf
+    ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni184Pdf', 'pdf')">NI184 PDF</button>`
+    : run.outputs?.ni184Html
+      ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni184Html', 'html')">NI184 review</button>`
     : `<span class="status neutral">NI184 pending</span>`;
-  const ni187 = run.outputs?.ni187Html
-    ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni187Html', 'html')">NI187 draft</button>`
+  const ni187 = run.outputs?.ni187Pdf
+    ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni187Pdf', 'pdf')">NI187 PDF</button>`
+    : run.outputs?.ni187Html
+      ? `<button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', 'ni187Html', 'html')">NI187 review</button>`
     : `<span class="status neutral">NI187 pending</span>`;
   return `<span class="form-links">${ni184}${ni187}</span>`;
 }
@@ -1438,20 +1444,28 @@ function runStatusBadge(run) {
 }
 
 function runActionButtons(run) {
-  if (localWorkspace || !selectedCompanyId || run.status !== "draft") return "";
+  if (localWorkspace || !selectedCompanyId) return "";
+  const hasPdfs = Boolean(
+    run.outputs?.ni184Pdf
+    && run.outputs?.ni187Pdf
+    && run.payslips.length
+    && run.payslips.every((payslip) => payslip.pdfBase64),
+  );
+  const canGenerate = run.status === "draft" || (run.status === "approved" && !hasPdfs);
+  if (!canGenerate) return "";
   const access = billingAccess();
   if (!access.canCreatePayroll) {
     return `
       <div class="actions compact-actions">
         <button class="btn primary disabled-action" onclick="explainBillingRequired()">Billing required</button>
-        <button class="btn danger-btn" onclick="cancelPayrollRun('${escapeHtml(run.month)}')">Cancel</button>
+        ${run.status === "draft" ? `<button class="btn danger-btn" onclick="cancelPayrollRun('${escapeHtml(run.month)}')">Cancel</button>` : ""}
       </div>
     `;
   }
   return `
     <div class="actions compact-actions">
-      <button class="btn primary" onclick="approvePayrollRun('${escapeHtml(run.month)}')">Approve</button>
-      <button class="btn danger-btn" onclick="cancelPayrollRun('${escapeHtml(run.month)}')">Cancel</button>
+      <button class="btn primary" onclick="approvePayrollRun('${escapeHtml(run.month)}')">${run.status === "draft" ? "Approve & generate PDFs" : "Generate PDFs"}</button>
+      ${run.status === "draft" ? `<button class="btn danger-btn" onclick="cancelPayrollRun('${escapeHtml(run.month)}')">Cancel</button>` : ""}
     </div>
   `;
 }
@@ -1471,7 +1485,7 @@ function runReviewSummary(run) {
       <div><span>Net pay</span><strong>${money(run.net)}</strong></div>
       <div><span>Employer NIS</span><strong>${money(run.nis_employer)}</strong></div>
       <div><span>NIS weeks</span><strong>${run.monday_count || "-"}</strong></div>
-      <div><span>Outputs</span><strong>${run.has_ni184 || run.has_ni187 || run.payslips.length ? "Generated" : "Not generated"}</strong></div>
+      <div><span>PDF outputs</span><strong>${run.outputs?.ni184Pdf && run.outputs?.ni187Pdf && run.payslips.some((payslip) => payslip.pdfBase64) ? "Ready" : "Awaiting approval"}</strong></div>
     </div>
   `;
 }
@@ -1564,7 +1578,13 @@ function payslipsView() {
           files: [],
         });
       }
-      grouped.get(key).files.push({ month: run.month, fileName: file.fileName, html: file.html });
+      grouped.get(key).files.push({
+        month: run.month,
+        fileName: file.fileName,
+        contentType: file.contentType,
+        pdfBase64: file.pdfBase64,
+        html: file.html,
+      });
     });
   });
 
@@ -1578,8 +1598,16 @@ function payslipsView() {
             <div><strong>${escapeHtml(group.name)}</strong><br><span class="caption">${escapeHtml(group.employeeId)}</span></div>
             <span class="status neutral">${group.files.length} payslip${group.files.length === 1 ? "" : "s"}</span>
           </div>
-          <div class="activity">
-            ${group.files.map((item) => `<button class="activity-button" onclick="openPayslip('${escapeHtml(item.month)}', '${escapeHtml(item.fileName)}')"><span>${escapeHtml(item.month)}</span><strong>Open payslip</strong></button>`).join("")}
+          <div class="activity nib-form-list">
+            ${group.files.map((item) => `
+              <div class="nib-form-row">
+                <span><strong>${escapeHtml(item.month)}</strong><br><span class="caption">${item.pdfBase64 ? "PDF payslip" : "Legacy payslip"}</span></span>
+                <span class="form-links">
+                  <button class="mini-link" onclick="openPayslip('${escapeHtml(item.month)}', '${escapeHtml(item.fileName)}')">Open</button>
+                  ${item.pdfBase64 ? `<button class="mini-link" onclick="downloadPayslip('${escapeHtml(item.month)}', '${escapeHtml(item.fileName)}')">Download</button>` : ""}
+                </span>
+              </div>
+            `).join("")}
           </div>
         </div>
       `).join("") || "<p>No payslips generated yet.</p>"}
@@ -1589,15 +1617,35 @@ function payslipsView() {
 
 function nibFormFiles(run) {
   return [
-    {
+    run.outputs?.ni184Pdf ? {
+      key: "ni184Pdf",
+      type: "pdf",
+      mimeType: "application/pdf",
+      label: "NI184",
+      description: "Employee contribution return",
+      fileName: run.outputs.ni184FileName || `NI184-${run.month}.pdf`,
+      available: true,
+    } : {
       key: "ni184Html",
+      type: "html",
+      mimeType: "text/html",
       label: "NI184",
       description: "Employee contribution return",
       fileName: `NI184-${run.month}.html`,
       available: Boolean(run.outputs?.ni184Html),
     },
-    {
+    run.outputs?.ni187Pdf ? {
+      key: "ni187Pdf",
+      type: "pdf",
+      mimeType: "application/pdf",
+      label: "NI187",
+      description: "Employee/employer contribution schedule",
+      fileName: run.outputs.ni187FileName || `NI187-${run.month}.pdf`,
+      available: true,
+    } : {
       key: "ni187Html",
+      type: "html",
+      mimeType: "text/html",
       label: "NI187",
       description: "Employee/employer contribution schedule",
       fileName: `NI187-${run.month}.html`,
@@ -1609,7 +1657,7 @@ function nibFormFiles(run) {
 function nibFormsView() {
   state ||= emptyLocalState();
   const runsWithForms = state.runs.filter((run) => (
-    run.outputs?.ni184Html || run.outputs?.ni187Html || run.has_ni184 || run.has_ni187
+    run.outputs?.ni184Pdf || run.outputs?.ni187Pdf || run.outputs?.ni184Html || run.outputs?.ni187Html || run.has_ni184 || run.has_ni187
   ));
   const generatedCount = state.runs.reduce((total, run) => (
     total + nibFormFiles(run).filter((form) => form.available).length
@@ -1634,8 +1682,8 @@ function nibFormsView() {
               <div class="nib-form-row">
                 <span><strong>${form.label}</strong><br><span class="caption">${form.description}</span></span>
                 <span class="form-links">
-                  <button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', 'html')">Open</button>
-                  <button class="mini-link" onclick="downloadPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', '${escapeHtml(form.fileName)}', 'text/html')">Download</button>
+                  <button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', '${form.type}')">Open</button>
+                  <button class="mini-link" onclick="downloadPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', '${escapeHtml(form.fileName)}', '${form.mimeType}')">Download</button>
                 </span>
               </div>
             ` : `
@@ -1680,6 +1728,30 @@ function openTextBlob(content, mimeType) {
 function downloadTextBlob(content, fileName, mimeType) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function base64Blob(content, mimeType) {
+  const binary = atob(content);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mimeType });
+}
+
+function openBase64Blob(content, mimeType) {
+  const url = URL.createObjectURL(base64Blob(content, mimeType));
+  window.open(url, "_blank", "noopener");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+function downloadBase64Blob(content, fileName, mimeType) {
+  const url = URL.createObjectURL(base64Blob(content, mimeType));
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
@@ -2542,7 +2614,9 @@ window.runPayroll = async function runPayroll() {
       state = payload.state;
     }
     activeView = "runs";
-    toast(payload.status === "draft" ? `Draft payroll created for ${month}.` : `Payroll completed for ${month}.`);
+    toast(payload.status === "draft"
+      ? `Draft payroll created for ${month}. Review it, then click Approve & generate PDFs.`
+      : `Payroll completed for ${month}.`);
     render();
   } catch (error) {
     toast(error.message);
@@ -2554,7 +2628,7 @@ window.approvePayrollRun = async function approvePayrollRun(month) {
   const access = billingAccess();
   if (!access.canCreatePayroll) return toast(access.message);
   try {
-    toast(`Finalizing payroll outputs for ${month}...`);
+    toast(`Generating payslips and NIB PDF forms for ${month}...`);
     const token = await getAuthToken();
     await api("/api/finalize-payroll", {
       method: "POST",
@@ -2563,11 +2637,11 @@ window.approvePayrollRun = async function approvePayrollRun(month) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ companyId: selectedCompanyId, month }),
-      timeoutMs: 20000,
+      timeoutMs: 60000,
     });
     await loadWorkspaceWithLoading("Refreshing payroll review...");
     activeView = "runs";
-    toast(`Payroll approved and outputs generated for ${month}.`);
+    toast(`Payroll approved. Payslips and NIB PDF forms are ready for ${month}.`);
     render();
   } catch (error) {
     toast(error.message);
@@ -2592,6 +2666,10 @@ window.openPayrollArtifact = function openPayrollArtifact(month, key, type) {
   const run = payrollRun(month);
   const content = run?.outputs?.[key];
   if (!content) return toast("That payroll output has not been generated yet.");
+  if (type === "pdf") {
+    openBase64Blob(content, "application/pdf");
+    return;
+  }
   if (type === "markdown") {
     openTextBlob(`<pre>${escapeHtml(content)}</pre>`, "text/html");
     return;
@@ -2603,14 +2681,29 @@ window.downloadPayrollArtifact = function downloadPayrollArtifact(month, key, fi
   const run = payrollRun(month);
   const content = run?.outputs?.[key];
   if (!content) return toast("That payroll output has not been generated yet.");
+  if (mimeType === "application/pdf") {
+    downloadBase64Blob(content, fileName, mimeType);
+    return;
+  }
   downloadTextBlob(content, fileName, mimeType);
 };
 
 window.openPayslip = function openPayslip(month, fileName) {
   const run = payrollRun(month);
   const payslip = run?.payslips.find((item) => item.fileName === fileName);
+  if (payslip?.pdfBase64) {
+    openBase64Blob(payslip.pdfBase64, "application/pdf");
+    return;
+  }
   if (!payslip?.html) return toast("That payslip has not been generated yet.");
   openTextBlob(payslip.html, "text/html");
+};
+
+window.downloadPayslip = function downloadPayslip(month, fileName) {
+  const run = payrollRun(month);
+  const payslip = run?.payslips.find((item) => item.fileName === fileName);
+  if (!payslip?.pdfBase64) return toast("That PDF payslip has not been generated yet.");
+  downloadBase64Blob(payslip.pdfBase64, payslip.fileName, "application/pdf");
 };
 
 window.explainPayrollUnavailable = function explainPayrollUnavailable() {

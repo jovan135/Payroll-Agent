@@ -2,6 +2,7 @@ const PROJECT_ID = "payroll-application-f6d25";
 const DATABASE = "(default)";
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE}/documents`;
 const { assertCanCreatePayroll } = require("./lib/billing-access");
+const { createPayrollPdfs } = require("./lib/pdf-artifacts");
 
 function sendJson(response, status, payload) {
   response.status(status).setHeader("Content-Type", "application/json");
@@ -326,13 +327,8 @@ function buildNisHtml(run, company, formName) {
 </html>`;
 }
 
-function finalizeRun(run, company) {
-  const payslips = (run.rows || []).map((row) => ({
-    employeeId: row.employeeId,
-    fullName: row.fullName,
-    fileName: `${fileSafe(row.employeeId)}-${run.month}-payslip.html`,
-    html: buildPayslipHtml(row, run, company),
-  }));
+async function finalizeRun(run, company, employees) {
+  const pdfs = await createPayrollPdfs(run, company, employees);
   return {
     ...run,
     status: "approved",
@@ -340,17 +336,20 @@ function finalizeRun(run, company) {
     hasNis: true,
     hasNi184: true,
     hasNi187: true,
-    payslips,
+    payslips: pdfs.payslips,
     outputs: {
       payrollCsv: buildPayrollCsv(run),
       payrollSummaryMarkdown: buildPayrollSummary(run),
-      ni184Html: buildNisHtml(run, company, "NI184"),
-      ni187Html: buildNisHtml(run, company, "NI187"),
+      ni184Pdf: pdfs.ni184Pdf,
+      ni184FileName: `NI184-${run.month}.pdf`,
+      ni187Pdf: pdfs.ni187Pdf,
+      ni187FileName: `NI187-${run.month}.pdf`,
       generatedAt: new Date(),
     },
     approvedAt: new Date(),
     updatedAt: new Date(),
-    note: "Approved payroll. Hosted payslips, payroll summary, payroll CSV, and NI184/NI187 draft review outputs were generated.",
+    note: "Approved payroll. PDF payslips, payroll summary, payroll CSV, and completed NI184/NI187 PDF forms were generated.",
+    pdfByteCounts: pdfs.byteCounts,
   };
 }
 
@@ -379,13 +378,18 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const [companyDoc, runDoc] = await Promise.all([
+    const [companyDoc, runDoc, employeesPayload] = await Promise.all([
       firestoreFetch(`companies/${encodeURIComponent(companyId)}`, token),
       firestoreFetch(`companies/${encodeURIComponent(companyId)}/payrollRuns/${encodeURIComponent(month)}`, token),
+      firestoreFetch(`companies/${encodeURIComponent(companyId)}/employees?pageSize=100`, token),
     ]);
     const company = fromFirestoreFields(companyDoc.fields || {});
     assertCanCreatePayroll(company.billing || {});
     const run = fromFirestoreFields(runDoc.fields || {});
+    const employees = (employeesPayload.documents || []).map((document) => ({
+      id: document.name.split("/").pop(),
+      ...fromFirestoreFields(document.fields || {}),
+    }));
     if (!Array.isArray(run.rows) || !run.rows.length) {
       sendJson(response, 400, { error: "Run payroll first so there is a draft to approve." });
       return;
@@ -395,7 +399,7 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const finalized = finalizeRun({ ...run, month, companyId }, company);
+    const finalized = await finalizeRun({ ...run, month, companyId }, company, employees);
     await firestoreFetch(
       `companies/${encodeURIComponent(companyId)}/payrollRuns/${encodeURIComponent(month)}`,
       token,
@@ -405,8 +409,14 @@ module.exports = async function handler(request, response) {
       },
     );
 
+    console.log("[finalize-payroll] PDF outputs generated", {
+      month,
+      employeeCount: finalized.payslips.length,
+      byteCounts: finalized.pdfByteCounts,
+    });
     sendJson(response, 200, { status: "approved", run: finalized });
   } catch (error) {
+    console.error("[finalize-payroll] failed", { error: error.message, status: error.status || 500 });
     sendJson(response, error.status || 500, { code: error.code, error: error.message || "Payroll finalization failed." });
   }
 };

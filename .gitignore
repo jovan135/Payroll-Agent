@@ -4,5 +4,6 @@ scratch/
 .vercel/
 dist/
 node_modules/
+tmp/
 .env.local
 .env.*.local

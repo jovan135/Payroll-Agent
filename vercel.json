@@ -1,6 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/finalize-payroll.js": {
+      "includeFiles": "templates/**",
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/__/auth/:path*",
