@@ -755,6 +755,42 @@ select {
   box-shadow: var(--shadow);
 }
 
+.acknowledgement-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 31, 46, 0.58);
+}
+
+.acknowledgement-dialog {
+  width: min(100%, 440px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 24px 60px rgba(12, 31, 46, 0.28);
+  padding: 24px;
+}
+
+.acknowledgement-dialog h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+}
+
+.acknowledgement-dialog p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.acknowledgement-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+
 .auth-page {
   display: grid;
   gap: 16px;

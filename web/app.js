@@ -689,6 +689,54 @@ function toast(message) {
   setTimeout(() => node.remove(), 3500);
 }
 
+function acknowledge(message, title = "Please note") {
+  return new Promise((resolve) => {
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const overlay = document.createElement("div");
+    const dialog = document.createElement("section");
+    const heading = document.createElement("h2");
+    const body = document.createElement("p");
+    const actions = document.createElement("div");
+    const button = document.createElement("button");
+    const headingId = `acknowledgement-title-${Date.now()}`;
+    const bodyId = `acknowledgement-body-${Date.now()}`;
+
+    overlay.className = "acknowledgement-overlay";
+    dialog.className = "acknowledgement-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", headingId);
+    dialog.setAttribute("aria-describedby", bodyId);
+    heading.id = headingId;
+    heading.textContent = title;
+    body.id = bodyId;
+    body.textContent = message;
+    actions.className = "acknowledgement-actions";
+    button.type = "button";
+    button.className = "btn primary";
+    button.textContent = "OK";
+    button.addEventListener("click", () => {
+      document.body.style.overflow = previousOverflow;
+      overlay.remove();
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+      resolve();
+    });
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      event.preventDefault();
+      button.focus();
+    });
+
+    actions.appendChild(button);
+    dialog.append(heading, body, actions);
+    overlay.appendChild(dialog);
+    document.body.style.overflow = "hidden";
+    document.body.appendChild(overlay);
+    button.focus();
+  });
+}
+
 function withTimeout(promise, ms, fallback) {
   return Promise.race([
     promise,
@@ -2614,10 +2662,15 @@ window.runPayroll = async function runPayroll() {
       state = payload.state;
     }
     activeView = "runs";
-    toast(payload.status === "draft"
-      ? `Draft payroll created for ${month}. Review it, then click Approve & generate PDFs.`
-      : `Payroll completed for ${month}.`);
     render();
+    if (payload.status === "draft") {
+      await acknowledge(
+        `Draft payroll for ${month} was created. Open the Payroll Runs section to review it, then click Approve & generate PDFs.`,
+        "Payroll draft ready",
+      );
+    } else {
+      toast(`Payroll completed for ${month}.`);
+    }
   } catch (error) {
     toast(error.message);
   }
