@@ -1355,33 +1355,50 @@ function firebaseSetupNotice() {
 
 function shell(content) {
   const navItems = isAdmin() ? [...companyNavItems, ...adminNavItems] : companyNavItems;
+  const subtitle = subtitleFor(activeView);
   const nav = navItems.map(([id, label]) => `
     <button class="${activeView === id ? "active" : ""}" onclick="setView('${id}')">
       <span>${icon(id)}</span><span class="nav-label">${label}</span>${navNotificationBadge(id)}
     </button>
   `).join("");
 
-  const companyOptions = memberships.map((membership) => `
-    <option value="${membership.id}" ${membership.id === selectedCompanyId && !localWorkspace ? "selected" : ""}>
-      ${escapeHtml(membership.company?.name || membership.companyName || membership.id)}
+  const companyChoices = new Map(memberships.map((membership) => [
+    membership.id,
+    membership.company?.name || membership.companyName || membership.id,
+  ]));
+  if (isAdmin()) {
+    adminSignupRequests
+      .filter((request) => request.status === "approved" && request.companyId)
+      .forEach((request) => companyChoices.set(request.companyId, request.companyName || request.companyId));
+    if (selectedAdminCompany?.id) {
+      companyChoices.set(selectedAdminCompany.id, selectedAdminCompany.name || selectedAdminCompany.id);
+    }
+  }
+  const companyOptions = Array.from(companyChoices, ([companyId, companyName]) => `
+    <option value="${companyId}" ${companyId === selectedCompanyId && !localWorkspace ? "selected" : ""}>
+      ${escapeHtml(companyName)}
     </option>
   `).join("");
+  const companySwitcher = isAdmin() ? `
+    <div class="tenant-switcher">
+      <label>Company
+        <select onchange="selectCompany(this.value)">
+          ${!selectedCompanyId && !localWorkspace ? `<option value="" selected disabled>Select a company</option>` : ""}
+          ${localWorkspace ? `<option value="local" selected>Local workspace</option>` : ""}
+          ${companyOptions}
+        </select>
+      </label>
+    </div>
+  ` : "";
 
   return `
     <div class="layout">
       <aside class="sidebar">
-        <div class="brand">
+        <button class="brand brand-button" onclick="setView('dashboard')" aria-label="Go to dashboard">
           <div class="brand-mark">PA</div>
           <div><strong>Payroll Agent</strong><span>${escapeHtml(currentCompanyName())}</span></div>
-        </div>
-        <div class="tenant-switcher">
-          <label>Company
-            <select onchange="selectCompany(this.value)">
-              ${localWorkspace ? `<option value="local" selected>Local workspace</option>` : ""}
-              ${companyOptions}
-            </select>
-          </label>
-        </div>
+        </button>
+        ${companySwitcher}
         <nav class="nav">${nav}</nav>
         <div class="side-note">
           Signed in<br>
@@ -1393,13 +1410,22 @@ function shell(content) {
         <div class="topbar">
           <div>
             <h1>${titleFor(activeView)}</h1>
-            <p>${subtitleFor(activeView)}</p>
+            ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
           </div>
           ${topbarActions()}
         </div>
         ${content}
       </main>
     </div>
+  `;
+}
+
+function payrollMonthControl(disabled = false) {
+  return `
+    <label class="payroll-month-control">
+      <span>Select Payroll Month</span>
+      <input id="runMonth" type="month" value="${payrollMonth}" onchange="setPayrollMonth(this.value)" ${disabled ? "disabled" : ""}>
+    </label>
   `;
 }
 
@@ -1410,7 +1436,7 @@ function topbarActions() {
   if (backendUnavailable && !canRunHostedPayroll) {
     return `
       <div class="actions">
-        <input id="runMonth" type="month" value="${payrollMonth}" onchange="setPayrollMonth(this.value)" disabled>
+        ${payrollMonthControl(true)}
         <label class="inline-check muted-control"><input id="generateNisForms" type="checkbox" checked disabled> NIS forms</label>
         <button class="btn primary disabled-action" onclick="explainPayrollUnavailable()">Payroll engine offline</button>
       </div>
@@ -1419,7 +1445,7 @@ function topbarActions() {
   if (!access.canCreatePayroll) {
     return `
       <div class="actions">
-        <input id="runMonth" type="month" value="${payrollMonth}" onchange="setPayrollMonth(this.value)">
+        ${payrollMonthControl()}
         <label class="inline-check muted-control"><input id="generateNisForms" type="checkbox" checked disabled> NIS forms</label>
         <button class="btn primary disabled-action" onclick="explainBillingRequired()">${escapeHtml(billingStatusMeta(selectedCompanyBilling().status).actionLabel)}</button>
       </div>
@@ -1427,7 +1453,7 @@ function topbarActions() {
   }
   return `
     <div class="actions">
-      <input id="runMonth" type="month" value="${payrollMonth}" onchange="setPayrollMonth(this.value)">
+      ${payrollMonthControl()}
       <label class="inline-check"><input id="generateNisForms" type="checkbox" checked> NIS forms</label>
       <button class="btn primary" onclick="runPayroll()">Run payroll</button>
     </div>
@@ -1461,7 +1487,7 @@ function titleFor(id) {
 
 function subtitleFor(id) {
   return {
-    dashboard: "Track company payroll readiness, reminders, statutory forms, and monthly runs.",
+    dashboard: "",
     employees: "Add and maintain employee records used by NIS, PAYE, Health Surcharge, and payslips.",
     runs: "Review draft payroll totals before approving final payroll files.",
     payslips: "Open generated payslips grouped by employee.",

@@ -56,6 +56,24 @@ button {
   margin-bottom: 28px;
 }
 
+.brand-button {
+  width: 100%;
+  border-radius: 8px;
+  background: transparent;
+  padding: 4px;
+  text-align: left;
+}
+
+.brand-button:hover,
+.brand-button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.brand-button:focus-visible {
+  outline: 2px solid rgba(191, 236, 232, 0.7);
+  outline-offset: 3px;
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
@@ -155,10 +173,26 @@ button {
   color: var(--muted);
 }
 
+.topbar > .actions {
+  align-items: flex-end;
+}
+
 .actions {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.payroll-month-control {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.payroll-month-control input {
+  min-width: 184px;
 }
 
 .auth-actions {
@@ -1479,8 +1513,12 @@ select {
     flex-wrap: wrap;
   }
 
-  .actions input[type="month"] {
+  .payroll-month-control {
     flex: 1 1 180px;
+  }
+
+  .payroll-month-control input {
+    min-width: 0;
   }
 
   .nib-form-head,
