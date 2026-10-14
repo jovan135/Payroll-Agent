@@ -488,6 +488,25 @@ th {
   line-height: 1.5;
 }
 
+.nav-label {
+  min-width: 0;
+  flex: 1;
+}
+
+.nav-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: white;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .plan-state {
   display: grid;
   min-height: 38px;
@@ -728,6 +747,24 @@ select {
 
 .nib-form-row.muted-row {
   color: var(--muted);
+}
+
+.new-file-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.new-file-indicator > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .mini-link {

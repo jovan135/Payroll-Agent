@@ -129,6 +129,13 @@ export async function loadUserProfile(uid) {
   }
 }
 
+export async function saveUserNotificationReads(uid, notificationReads) {
+  await setDoc(doc(db, "users", uid), {
+    notificationReads,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
 export async function loadMemberships(uid) {
   try {
     const membershipsSnapshot = await getDocs(collection(db, "users", uid, "memberships"));

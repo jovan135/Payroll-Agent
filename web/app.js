@@ -14,6 +14,7 @@ import {
   saveCompanyBilling,
   saveCompanyEmployee,
   saveCompanyProfile,
+  saveUserNotificationReads,
   signInWithGoogle,
   signOutUser,
   updateCompanyPayrollRunStatus,
@@ -25,7 +26,6 @@ const companyNavItems = [
   ["runs", "Payroll Runs"],
   ["payslips", "Payslips"],
   ["nibForms", "NIB Forms"],
-  ["reports", "Reports"],
   ["settings", "Settings"],
 ];
 
@@ -502,6 +502,173 @@ function selectedCompanyProfile() {
       declarant: request.declarant,
       status: request.status,
     } : null);
+}
+
+function timestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value === "number") return value;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  const seconds = Number(value.seconds ?? value._seconds ?? 0);
+  if (seconds) return (seconds * 1000) + Math.floor(Number(value.nanoseconds ?? value._nanoseconds ?? 0) / 1000000);
+  const parsed = Date.parse(String(value));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function runArtifactVersion(run) {
+  const generatedAt = timestampMillis(run.outputs?.generatedAt)
+    || timestampMillis(run.approvedAt)
+    || timestampMillis(run.updatedAt)
+    || timestampMillis(run.generatedAt);
+  if (generatedAt) return String(generatedAt);
+  const payslipBytes = run.payslips.reduce((total, payslip) => (
+    total + String(payslip.pdfBase64 || payslip.html || "").length
+  ), 0);
+  return `${run.month}:${payslipBytes}:${String(run.outputs?.ni184Pdf || run.outputs?.ni184Html || "").length}:${String(run.outputs?.ni187Pdf || run.outputs?.ni187Html || "").length}`;
+}
+
+function runHasGeneratedFiles(run) {
+  return Boolean(
+    run.payslips.some((payslip) => payslip.pdfBase64 || payslip.html)
+    || run.outputs?.ni184Pdf
+    || run.outputs?.ni187Pdf
+    || run.outputs?.ni184Html
+    || run.outputs?.ni187Html
+    || run.outputs?.payrollCsv
+    || run.outputs?.payrollSummaryMarkdown
+  );
+}
+
+function payrollRunNotificationId(run) {
+  return `run:${run.month}:${runArtifactVersion(run)}`;
+}
+
+function payslipNotificationId(run, payslip) {
+  return `payslip:${run.month}:${runArtifactVersion(run)}:${payslip.fileName}`;
+}
+
+function nibFormNotificationId(run, form) {
+  return `nib:${run.month}:${runArtifactVersion(run)}:${form.key}`;
+}
+
+function notificationWorkspaceId() {
+  return localWorkspace ? "local" : selectedCompanyId || "none";
+}
+
+function notificationStorageKey() {
+  return `payrollNotifications:${authUser?.uid || "guest"}:${notificationWorkspaceId()}`;
+}
+
+function emptyNotificationState() {
+  return {
+    seen: { runs: [], payslips: [], nibForms: [] },
+    opened: { payslips: [], nibForms: [] },
+  };
+}
+
+function normalizeNotificationState(value = {}) {
+  const empty = emptyNotificationState();
+  return {
+    seen: {
+      runs: Array.isArray(value.seen?.runs) ? value.seen.runs : empty.seen.runs,
+      payslips: Array.isArray(value.seen?.payslips) ? value.seen.payslips : empty.seen.payslips,
+      nibForms: Array.isArray(value.seen?.nibForms) ? value.seen.nibForms : empty.seen.nibForms,
+    },
+    opened: {
+      payslips: Array.isArray(value.opened?.payslips) ? value.opened.payslips : empty.opened.payslips,
+      nibForms: Array.isArray(value.opened?.nibForms) ? value.opened.nibForms : empty.opened.nibForms,
+    },
+  };
+}
+
+function currentNotificationState() {
+  const workspaceId = notificationWorkspaceId();
+  const remote = !localWorkspace ? userProfile?.notificationReads?.[workspaceId] : null;
+  let local = null;
+  try {
+    local = JSON.parse(localStorage.getItem(notificationStorageKey()) || "null");
+  } catch {
+    local = null;
+  }
+  return normalizeNotificationState(remote || local || {});
+}
+
+function notificationItems(category) {
+  const runs = state?.runs || [];
+  if (category === "runs") {
+    return runs.filter(runHasGeneratedFiles).map(payrollRunNotificationId);
+  }
+  if (category === "payslips") {
+    return runs.flatMap((run) => run.payslips
+      .filter((payslip) => payslip.pdfBase64 || payslip.html)
+      .map((payslip) => payslipNotificationId(run, payslip)));
+  }
+  if (category === "nibForms") {
+    return runs.flatMap((run) => nibFormFiles(run)
+      .filter((form) => form.available)
+      .map((form) => nibFormNotificationId(run, form)));
+  }
+  return [];
+}
+
+function trimNotificationIds(ids) {
+  return Array.from(new Set(ids)).slice(-240);
+}
+
+function persistNotificationState(notificationState) {
+  const normalized = normalizeNotificationState(notificationState);
+  localStorage.setItem(notificationStorageKey(), JSON.stringify(normalized));
+  if (!authUser || localWorkspace || !selectedCompanyId) return;
+  const notificationReads = {
+    ...(userProfile?.notificationReads || {}),
+    [notificationWorkspaceId()]: normalized,
+  };
+  userProfile = { ...userProfile, notificationReads };
+  saveUserNotificationReads(authUser.uid, notificationReads).catch((error) => {
+    console.error("Notification read state could not be saved.", error);
+  });
+}
+
+function markNotificationCategorySeen(category) {
+  if (!Object.prototype.hasOwnProperty.call(emptyNotificationState().seen, category)) return;
+  const notificationState = currentNotificationState();
+  notificationState.seen[category] = trimNotificationIds([
+    ...notificationState.seen[category],
+    ...notificationItems(category),
+  ]);
+  persistNotificationState(notificationState);
+}
+
+function markNotificationItemOpened(category, itemId) {
+  const notificationState = currentNotificationState();
+  if (!notificationState.opened[category] || !itemId) return;
+  notificationState.opened[category] = trimNotificationIds([
+    ...notificationState.opened[category],
+    itemId,
+  ]);
+  persistNotificationState(notificationState);
+}
+
+function isNotificationItemNew(category, itemId) {
+  return !currentNotificationState().opened[category]?.includes(itemId);
+}
+
+function notificationBadgeCount(category) {
+  const seen = new Set(currentNotificationState().seen[category] || []);
+  return notificationItems(category).filter((itemId) => !seen.has(itemId)).length;
+}
+
+function navNotificationBadge(category) {
+  if (!["runs", "payslips", "nibForms"].includes(category)) return "";
+  const count = notificationBadgeCount(category);
+  if (!count) return "";
+  const label = count === 1 ? "1 new item" : `${count} new items`;
+  return `<span class="nav-badge" aria-label="${label}" title="${label}">${count > 99 ? "99+" : count}</span>`;
+}
+
+function newFileIndicator(category, itemId) {
+  return isNotificationItemNew(category, itemId)
+    ? `<span class="new-file-indicator"><span aria-hidden="true"></span>New</span>`
+    : "";
 }
 
 function isJspaWorkspace() {
@@ -1152,7 +1319,7 @@ function shell(content) {
   const navItems = isAdmin() ? [...companyNavItems, ...adminNavItems] : companyNavItems;
   const nav = navItems.map(([id, label]) => `
     <button class="${activeView === id ? "active" : ""}" onclick="setView('${id}')">
-      <span>${icon(id)}</span>${label}
+      <span>${icon(id)}</span><span class="nav-label">${label}</span>${navNotificationBadge(id)}
     </button>
   `).join("");
 
@@ -1235,7 +1402,6 @@ function icon(id) {
     employees: "☷",
     runs: "◷",
     payslips: "□",
-    reports: "◫",
     settings: "⚙",
     admin: "★",
     companies: "▤",
@@ -1249,7 +1415,6 @@ function titleFor(id) {
     runs: "Payroll Runs",
     payslips: "Payslips",
     nibForms: "NIB Forms",
-    reports: "Reports",
     settings: "Settings",
     admin: "Administrator",
     companies: "Companies",
@@ -1263,7 +1428,6 @@ function subtitleFor(id) {
     runs: "Review draft payroll totals before approving final payroll files.",
     payslips: "Open generated payslips grouped by employee.",
     nibForms: "Open generated NI184 and NI187 forms by payroll month.",
-    reports: "Compare gross pay, deductions, net pay, and employer costs.",
     settings: "Control reminder timing and scheduled payroll preferences.",
     admin: "Approve company signups and monitor account onboarding.",
     companies: "Review company memberships available to your account.",
@@ -1300,7 +1464,7 @@ function dashboard() {
         ${employeeTable(state.employees.slice(0, 5))}
       </section>
       <section class="panel">
-        <div class="panel-head"><h2>Recent payroll runs</h2><button class="btn" onclick="setView('reports')">Reports</button></div>
+        <div class="panel-head"><h2>Recent payroll runs</h2><button class="btn" onclick="setView('runs')">View all</button></div>
         ${runList(state.runs.slice(0, 4))}
       </section>
     </div>
@@ -1632,6 +1796,7 @@ function payslipsView() {
         contentType: file.contentType,
         pdfBase64: file.pdfBase64,
         html: file.html,
+        notificationId: payslipNotificationId(run, file),
       });
     });
   });
@@ -1649,7 +1814,7 @@ function payslipsView() {
           <div class="activity nib-form-list">
             ${group.files.map((item) => `
               <div class="nib-form-row">
-                <span><strong>${escapeHtml(item.month)}</strong><br><span class="caption">${item.pdfBase64 ? "PDF payslip" : "Legacy payslip"}</span></span>
+                <span><strong>${escapeHtml(item.month)}</strong>${newFileIndicator("payslips", item.notificationId)}<br><span class="caption">${item.pdfBase64 ? "PDF payslip" : "Legacy payslip"}</span></span>
                 <span class="form-links">
                   <button class="mini-link" onclick="openPayslip('${escapeHtml(item.month)}', '${escapeHtml(item.fileName)}')">Open</button>
                   ${item.pdfBase64 ? `<button class="mini-link" onclick="downloadPayslip('${escapeHtml(item.month)}', '${escapeHtml(item.fileName)}')">Download</button>` : ""}
@@ -1728,7 +1893,7 @@ function nibFormsView() {
           <div class="activity nib-form-list">
             ${nibFormFiles(run).map((form) => form.available ? `
               <div class="nib-form-row">
-                <span><strong>${form.label}</strong><br><span class="caption">${form.description}</span></span>
+                <span><strong>${form.label}</strong>${newFileIndicator("nibForms", nibFormNotificationId(run, form))}<br><span class="caption">${form.description}</span></span>
                 <span class="form-links">
                   <button class="mini-link" onclick="openPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', '${form.type}')">Open</button>
                   <button class="mini-link" onclick="downloadPayrollArtifact('${escapeHtml(run.month)}', '${form.key}', '${escapeHtml(form.fileName)}', '${form.mimeType}')">Download</button>
@@ -1743,53 +1908,6 @@ function nibFormsView() {
           </div>
         </div>
       `).join("") || "<p>No NIB forms generated yet.</p>"}
-    </section>
-  `;
-}
-
-function reportsView() {
-  state ||= emptyLocalState();
-  return `
-    <section class="panel">
-      <div class="panel-head"><h2>Payroll reports</h2><span class="status neutral">${state.runs.length} month${state.runs.length === 1 ? "" : "s"}</span></div>
-      ${state.runs.length ? `
-        <div class="table-scroll">
-          <table class="review-table">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Status</th>
-                <th class="money">Employees</th>
-                <th class="money">Gross</th>
-                <th class="money">Employee NIS</th>
-                <th class="money">PAYE</th>
-                <th class="money">Health Surcharge</th>
-                <th class="money">Other deductions</th>
-                <th class="money">Total deductions</th>
-                <th class="money">Net pay</th>
-                <th class="money">Employer NIS</th>
-                <th>Payroll files</th>
-              </tr>
-            </thead>
-            <tbody>${state.runs.map((run) => `
-              <tr>
-                <td><strong>${escapeHtml(run.month)}</strong></td>
-                <td>${runStatusBadge(run)}</td>
-                <td class="money">${run.employees}</td>
-                <td class="money">${money(run.gross)}</td>
-                <td class="money">${money(run.nis_employee)}</td>
-                <td class="money">${money(run.paye)}</td>
-                <td class="money">${money(run.health_surcharge)}</td>
-                <td class="money">${money(run.pre_tax_deductions + run.post_tax_deductions)}</td>
-                <td class="money">${money(run.deductions)}</td>
-                <td class="money"><strong>${money(run.net)}</strong></td>
-                <td class="money">${money(run.nis_employer)}</td>
-                <td>${outputLinks(run) || `<span class="status neutral">Pending</span>`}</td>
-              </tr>
-            `).join("")}</tbody>
-          </table>
-        </div>
-      ` : "<p>No payroll reports found.</p>"}
     </section>
   `;
 }
@@ -2032,7 +2150,6 @@ function render() {
     runs: runsView,
     payslips: payslipsView,
     nibForms: nibFormsView,
-    reports: reportsView,
     settings: settingsView,
     admin: adminView,
     companies: companiesView,
@@ -2173,6 +2290,7 @@ window.selectCompany = async function selectCompany(companyId) {
 
 window.setView = function setView(view) {
   activeView = view;
+  if (["runs", "payslips", "nibForms"].includes(view)) markNotificationCategorySeen(view);
   render();
 };
 
@@ -2726,7 +2844,10 @@ window.approvePayrollRun = async function approvePayrollRun(month) {
     });
     await loadWorkspaceWithLoading("Refreshing payroll review...");
     activeView = "runs";
-    toast(`Payroll approved. Payslips and NIB PDF forms are ready for ${month}.`);
+    const completedRun = payrollRun(month);
+    const payslipCount = completedRun?.payslips.filter((payslip) => payslip.pdfBase64 || payslip.html).length || 0;
+    const nibFormCount = completedRun ? nibFormFiles(completedRun).filter((form) => form.available).length : 0;
+    toast(`Payroll approved. ${payslipCount} payslip${payslipCount === 1 ? "" : "s"} and ${nibFormCount} NIB form${nibFormCount === 1 ? "" : "s"} are ready.`);
     render();
   } catch (error) {
     toast(error.message);
@@ -2751,44 +2872,56 @@ window.openPayrollArtifact = function openPayrollArtifact(month, key, type) {
   const run = payrollRun(month);
   const content = run?.outputs?.[key];
   if (!content) return toast("That payroll output has not been generated yet.");
+  if (/^ni(184|187)/.test(key)) markNotificationItemOpened("nibForms", nibFormNotificationId(run, { key }));
   if (type === "pdf") {
     openBase64Blob(content, "application/pdf");
+    render();
     return;
   }
   if (type === "markdown") {
     openTextBlob(`<pre>${escapeHtml(content)}</pre>`, "text/html");
+    render();
     return;
   }
   openTextBlob(content, "text/html");
+  render();
 };
 
 window.downloadPayrollArtifact = function downloadPayrollArtifact(month, key, fileName, mimeType) {
   const run = payrollRun(month);
   const content = run?.outputs?.[key];
   if (!content) return toast("That payroll output has not been generated yet.");
+  if (/^ni(184|187)/.test(key)) markNotificationItemOpened("nibForms", nibFormNotificationId(run, { key }));
   if (mimeType === "application/pdf") {
     downloadBase64Blob(content, fileName, mimeType);
+    render();
     return;
   }
   downloadTextBlob(content, fileName, mimeType);
+  render();
 };
 
 window.openPayslip = function openPayslip(month, fileName) {
   const run = payrollRun(month);
   const payslip = run?.payslips.find((item) => item.fileName === fileName);
+  if (payslip) markNotificationItemOpened("payslips", payslipNotificationId(run, payslip));
   if (payslip?.pdfBase64) {
     openBase64Blob(payslip.pdfBase64, "application/pdf");
+    render();
     return;
   }
   if (!payslip?.html) return toast("That payslip has not been generated yet.");
   openTextBlob(payslip.html, "text/html");
+  render();
 };
 
 window.downloadPayslip = function downloadPayslip(month, fileName) {
   const run = payrollRun(month);
   const payslip = run?.payslips.find((item) => item.fileName === fileName);
   if (!payslip?.pdfBase64) return toast("That PDF payslip has not been generated yet.");
+  markNotificationItemOpened("payslips", payslipNotificationId(run, payslip));
   downloadBase64Blob(payslip.pdfBase64, payslip.fileName, "application/pdf");
+  render();
 };
 
 window.explainPayrollUnavailable = function explainPayrollUnavailable() {
