@@ -83,6 +83,7 @@ const adjustmentScopes = [
 ];
 
 const defaultPlanId = "monthly_standard";
+const notificationSchemaVersion = "v1";
 const planDefinitions = {
   monthly_standard: {
     id: "monthly_standard",
@@ -539,15 +540,15 @@ function runHasGeneratedFiles(run) {
 }
 
 function payrollRunNotificationId(run) {
-  return `run:${run.month}:${runArtifactVersion(run)}`;
+  return `run:${notificationSchemaVersion}:${run.month}:${runArtifactVersion(run)}`;
 }
 
 function payslipNotificationId(run, payslip) {
-  return `payslip:${run.month}:${runArtifactVersion(run)}:${payslip.fileName}`;
+  return `payslip:${notificationSchemaVersion}:${run.month}:${runArtifactVersion(run)}:${payslip.fileName}`;
 }
 
 function nibFormNotificationId(run, form) {
-  return `nib:${run.month}:${runArtifactVersion(run)}:${form.key}`;
+  return `nib:${notificationSchemaVersion}:${run.month}:${runArtifactVersion(run)}:${form.key}`;
 }
 
 function notificationWorkspaceId() {
