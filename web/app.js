@@ -1300,7 +1300,7 @@ function dashboard() {
         ${employeeTable(state.employees.slice(0, 5))}
       </section>
       <section class="panel">
-        <div class="panel-head"><h2>Recent payroll runs</h2><button class="btn" onclick="setView('runs')">Reports</button></div>
+        <div class="panel-head"><h2>Recent payroll runs</h2><button class="btn" onclick="setView('reports')">Reports</button></div>
         ${runList(state.runs.slice(0, 4))}
       </section>
     </div>
@@ -1751,13 +1751,45 @@ function reportsView() {
   state ||= emptyLocalState();
   return `
     <section class="panel">
-      <div class="panel-head"><h2>Reports</h2><span class="status neutral">Historical totals</span></div>
-      <table>
-        <thead><tr><th>Month</th><th class="money">Gross</th><th class="money">Deductions</th><th class="money">Net Pay</th><th>Payslips</th><th>NIS Forms</th></tr></thead>
-        <tbody>${state.runs.map((run) => `
-          <tr><td>${escapeHtml(run.month)}</td><td class="money">${money(run.gross)}</td><td class="money">${money(run.deductions)}</td><td class="money">${money(run.net)}</td><td>${run.payslips.length}</td><td>${formBadges(run)}</td></tr>
-        `).join("")}</tbody>
-      </table>
+      <div class="panel-head"><h2>Payroll reports</h2><span class="status neutral">${state.runs.length} month${state.runs.length === 1 ? "" : "s"}</span></div>
+      ${state.runs.length ? `
+        <div class="table-scroll">
+          <table class="review-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Status</th>
+                <th class="money">Employees</th>
+                <th class="money">Gross</th>
+                <th class="money">Employee NIS</th>
+                <th class="money">PAYE</th>
+                <th class="money">Health Surcharge</th>
+                <th class="money">Other deductions</th>
+                <th class="money">Total deductions</th>
+                <th class="money">Net pay</th>
+                <th class="money">Employer NIS</th>
+                <th>Payroll files</th>
+              </tr>
+            </thead>
+            <tbody>${state.runs.map((run) => `
+              <tr>
+                <td><strong>${escapeHtml(run.month)}</strong></td>
+                <td>${runStatusBadge(run)}</td>
+                <td class="money">${run.employees}</td>
+                <td class="money">${money(run.gross)}</td>
+                <td class="money">${money(run.nis_employee)}</td>
+                <td class="money">${money(run.paye)}</td>
+                <td class="money">${money(run.health_surcharge)}</td>
+                <td class="money">${money(run.pre_tax_deductions + run.post_tax_deductions)}</td>
+                <td class="money">${money(run.deductions)}</td>
+                <td class="money"><strong>${money(run.net)}</strong></td>
+                <td class="money">${money(run.nis_employer)}</td>
+                <td>${outputLinks(run) || `<span class="status neutral">Pending</span>`}</td>
+              </tr>
+            `).join("")}</tbody>
+          </table>
+        </div>
+      ` : "<p>No payroll reports found.</p>"}
     </section>
   `;
 }
