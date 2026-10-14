@@ -1192,12 +1192,13 @@ function renderLogin() {
       <section class="landing-hero">
         <div class="hero-copy">
           <span class="eyebrow">Payroll, payslips, and NIS readiness</span>
-          <h1>Run monthly payroll, generate complete payslips, and get automatically filled out NIB forms.</h1>
-          <p>
-            Payroll Agent helps small businesses keep employee records, calculate payroll deductions,
-            prepare payslips, and automatically fill out the NI184 and NI187 forms so they are ready
-            to print and sign.
-          </p>
+          <h1>Simple monthly payroll for small T&T businesses.</h1>
+          <ul class="hero-benefits" aria-label="What Payroll Agent does">
+            <li><strong>Monthly payroll calculations</strong></li>
+            <li><strong>Automated NI184 and NI187 forms</strong></li>
+            <li><strong>Easy payslip generation</strong></li>
+            <li><strong>More time for your business</strong></li>
+          </ul>
           <div class="landing-actions">
             <button class="btn primary large" onclick="signIn('signup')">Sign up company</button>
             <button class="btn large" onclick="signIn('login')">Log in</button>
@@ -1209,17 +1210,17 @@ function renderLogin() {
           </div>
         </div>
 
-        <aside class="product-preview" aria-label="Payroll Agent dashboard preview">
+        <aside class="product-preview" aria-label="Payroll Agent dashboard preview with fictional sample data">
           <div class="preview-top">
             <div>
-              <span>July 2026 Payroll</span>
-              <strong>The J Spa and Skin Clinic LTD</strong>
+              <span>Example payroll</span>
+              <strong>Sample Company Ltd</strong>
             </div>
             <span class="status success">Ready</span>
           </div>
           <div class="preview-kpis">
-            <div><span>Employees</span><strong>3</strong></div>
-            <div><span>Net pay</span><strong>TTD 12,476.10</strong></div>
+            <div><span>Employees</span><strong>4</strong></div>
+            <div><span>Net pay</span><strong>TTD 18,742.35</strong></div>
             <div><span>NIB forms</span><strong>Ready to print</strong></div>
           </div>
           <div class="preview-list">

@@ -936,12 +936,35 @@ select {
   font-size: clamp(40px, 5.2vw, 62px);
 }
 
-.hero-copy p {
+.hero-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
   max-width: 680px;
-  margin: 18px 0 0;
-  color: #455967;
-  font-size: 18px;
-  line-height: 1.58;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-benefits li {
+  position: relative;
+  border-top: 1px solid var(--line);
+  padding: 12px 14px 12px 22px;
+}
+
+.hero-benefits li::before {
+  position: absolute;
+  top: 18px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+}
+
+.hero-benefits strong {
+  font-size: 16px;
 }
 
 .eyebrow {
@@ -1323,10 +1346,6 @@ select {
     font-size: 42px;
   }
 
-  .hero-copy p {
-    font-size: 17px;
-  }
-
   .benefit-grid,
   .trust-grid,
   .compact-steps {
@@ -1389,8 +1408,6 @@ select {
 }
 
 @media (max-width: 620px) {
-  .landing-nav-actions,
-  .landing-actions,
   .requirement-strip,
   .preview-top,
   .preview-list div {
@@ -1400,11 +1417,16 @@ select {
 
   .landing-nav-actions .btn,
   .landing-actions .btn {
-    width: 100%;
+    flex: 1 1 130px;
+    width: auto;
   }
 
   .hero-copy h1 {
     font-size: 34px;
+  }
+
+  .hero-benefits {
+    grid-template-columns: 1fr;
   }
 
   .product-preview,
