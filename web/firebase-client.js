@@ -174,6 +174,7 @@ export async function requestCompanySignup(user, company) {
       position: company.declarant?.position || "",
       signatureRequiredAfterGeneration: true,
     },
+    requestedPlanId: company.requestedPlanId || standardPlan.planId,
     status: "pending",
     requestedByUid: user.uid,
     requestedByEmail: user.email || "",
@@ -208,7 +209,7 @@ export async function approveSignupRequest(request) {
   const billing = {
     provider: "paypal",
     status: "trial",
-    planId: standardPlan.planId,
+    planId: request.requestedPlanId || standardPlan.planId,
     monthlyFee: standardPlan.monthlyFee,
     currency: standardPlan.currency,
     subscriptionId: "",

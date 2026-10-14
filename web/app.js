@@ -1173,6 +1173,7 @@ function escapeHtml(value) {
 }
 
 function renderLogin() {
+  const plan = planDefinitions[defaultPlanId];
   return `
     <main class="landing-page">
       <header class="landing-nav">
@@ -1185,7 +1186,7 @@ function renderLogin() {
         </div>
         <div class="landing-nav-actions">
           <button class="btn" onclick="signIn('login')">Log in</button>
-          <button class="btn primary" onclick="signIn('signup')">Sign up company</button>
+          <button class="btn primary" onclick="signIn('signup')">Start free month</button>
         </div>
       </header>
 
@@ -1200,7 +1201,7 @@ function renderLogin() {
             <li><strong>More time for your business</strong></li>
           </ul>
           <div class="landing-actions">
-            <button class="btn primary large" onclick="signIn('signup')">Sign up company</button>
+            <button class="btn primary large" onclick="signIn('signup')">Start free month</button>
             <button class="btn large" onclick="signIn('login')">Log in</button>
           </div>
           <div class="requirement-strip">
@@ -1231,6 +1232,25 @@ function renderLogin() {
         </aside>
       </section>
 
+      <section class="landing-plan" aria-label="Standard subscription plan">
+        <div>
+          <span>Standard plan</span>
+          <strong>${plan.trialLengthDays} days free</strong>
+        </div>
+        <div>
+          <span>After your trial</span>
+          <strong>${escapeHtml(plan.priceLabel)}</strong>
+        </div>
+        <div>
+          <span>Included</span>
+          <strong>Up to ${plan.employeeLimit} employees</strong>
+        </div>
+        <div class="landing-plan-action">
+          <button class="btn primary" onclick="signIn('signup')">Choose Standard</button>
+          <span>No payment during signup</span>
+        </div>
+      </section>
+
       <section class="landing-section compact-section">
         <div class="steps compact-steps" aria-label="How Payroll Agent works">
           <div><strong>1</strong><span>Add company details</span></div>
@@ -1247,6 +1267,7 @@ function renderLogin() {
 }
 
 function renderOnboarding() {
+  const plan = planDefinitions[defaultPlanId];
   const requests = mySignupRequests.map((request) => `
     <div>
       <span><strong>${escapeHtml(request.companyName)}</strong><br><span class="caption">${escapeHtml(request.status)}</span></span>
@@ -1265,6 +1286,21 @@ function renderOnboarding() {
             <p>Submit a company request. After approval, the business gets its own payroll workspace.</p>
           </div>
           <button class="btn" onclick="signOut()">Sign out</button>
+        </div>
+        <div class="form-section signup-plan-summary" aria-label="Selected subscription plan">
+          <div class="signup-plan-head">
+            <div>
+              <span>Selected plan</span>
+              <h2>${escapeHtml(plan.label)}</h2>
+            </div>
+            <span class="status success">${plan.trialLengthDays} days free</span>
+          </div>
+          <div class="signup-plan-details">
+            <strong>${escapeHtml(plan.priceLabel)} after trial</strong>
+            <span>Up to ${plan.employeeLimit} employees</span>
+            <span>PayPal subscription</span>
+          </div>
+          <p class="caption">No payment is collected when you submit this form. After approval, your free trial begins and you can subscribe with PayPal before it ends.</p>
         </div>
         <div class="form-section">
           <h2>Company details</h2>
@@ -2249,6 +2285,7 @@ window.submitCompanySignup = async function submitCompanySignup() {
         name: document.getElementById("signup-declarant-name").value.trim(),
         position: document.getElementById("signup-declarant-position").value.trim(),
       },
+      requestedPlanId: defaultPlanId,
     });
     await hydrateAfterWrite("Company request submitted.");
   } catch (error) {
