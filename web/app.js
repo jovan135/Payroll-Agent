@@ -1355,6 +1355,7 @@ function firebaseSetupNotice() {
 
 function shell(content) {
   const navItems = isAdmin() ? [...companyNavItems, ...adminNavItems] : companyNavItems;
+  const title = titleFor(activeView);
   const subtitle = subtitleFor(activeView);
   const nav = navItems.map(([id, label]) => `
     <button class="${activeView === id ? "active" : ""}" onclick="setView('${id}')">
@@ -1407,11 +1408,11 @@ function shell(content) {
         </div>
       </aside>
       <main class="main">
-        <div class="topbar">
-          <div>
-            <h1>${titleFor(activeView)}</h1>
+        <div class="topbar ${title || subtitle ? "" : "actions-only"}">
+          ${title || subtitle ? `<div>
+            ${title ? `<h1>${escapeHtml(title)}</h1>` : ""}
             ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ""}
-          </div>
+          </div>` : ""}
           ${topbarActions()}
         </div>
         ${content}
@@ -1474,7 +1475,7 @@ function icon(id) {
 
 function titleFor(id) {
   return {
-    dashboard: `${state.latest_run?.month || "Current"} Payroll`,
+    dashboard: "",
     employees: "Employees",
     runs: "Payroll Runs",
     payslips: "Payslips",
@@ -1500,8 +1501,6 @@ function subtitleFor(id) {
 
 function dashboard() {
   state ||= emptyLocalState();
-  const activeEmployees = state.employees.filter((employee) => employee.active).length;
-  const latest = state.latest_run || {};
   const alerts = state.alerts.map((alert) => `
     <div>
       <strong>${escapeHtml(alert.title)}</strong>
@@ -1512,13 +1511,7 @@ function dashboard() {
 
   return `
     ${billingNotice()}
-    <div class="grid kpis">
-      ${metric("Active employees", activeEmployees)}
-      ${metric("Latest net pay", money(latest.net))}
-      ${metric("Latest deductions", money(latest.deductions))}
-      ${metric("NIS forms", latest.has_ni184 && latest.has_ni187 ? "Ready" : "Pending")}
-    </div>
-    <section class="panel" style="margin-top:16px">
+    <section class="panel">
       <div class="panel-head"><h2>Pending changes</h2><span class="status ${state.alerts.length ? "warning" : "success"}">${state.alerts.length ? "Review" : "Clear"}</span></div>
       ${alerts}
     </section>
@@ -1533,10 +1526,6 @@ function dashboard() {
       </section>
     </div>
   `;
-}
-
-function metric(label, value) {
-  return `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`;
 }
 
 function employeeTable(rows) {
